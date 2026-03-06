@@ -64,18 +64,27 @@ export function useAudioEngine() {
 
   // Handle play/stop
   useEffect(() => {
-    if (!initializedRef.current) return;
+    let cancelled = false;
 
-    if (isPlaying) {
+    const handlePlay = async () => {
+      // Ensure engine is initialized before playing
+      if (!initializedRef.current) {
+        await initEngine();
+      }
+      if (cancelled) return;
+
       // Build and play the full arrangement
       const arrangementPattern = Scheduler.buildArrangementPattern(project);
+      console.log('[useAudioEngine] arrangement pattern:', arrangementPattern);
       if (arrangementPattern && arrangementPattern !== 'silence') {
-        strudelEngine.playPatternString(arrangementPattern);
+        await strudelEngine.playPatternString(arrangementPattern);
       } else {
-        // Nothing to play
+        console.warn('[useAudioEngine] No audible pattern to play');
         setPlaying(false);
         return;
       }
+
+      if (cancelled) return;
 
       // Track bar position
       const msPerBar = (60 / project.bpm) * 4 * 1000; // 4 beats per bar
@@ -89,6 +98,10 @@ export function useAudioEngine() {
         }
         setCurrentBar(currentBar);
       }, msPerBar);
+    };
+
+    if (isPlaying) {
+      handlePlay();
     } else {
       strudelEngine.stop();
       if (barIntervalRef.current !== null) {
@@ -98,6 +111,7 @@ export function useAudioEngine() {
     }
 
     return () => {
+      cancelled = true;
       if (barIntervalRef.current !== null) {
         clearInterval(barIntervalRef.current);
         barIntervalRef.current = null;
@@ -110,7 +124,7 @@ export function useAudioEngine() {
     if (!initializedRef.current) {
       await initEngine();
     }
-    strudelEngine.previewPattern(pattern);
+    await strudelEngine.previewPattern(pattern);
   }, [initEngine]);
 
   // Stop preview (restore arrangement or silence)

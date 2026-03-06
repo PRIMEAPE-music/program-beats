@@ -1,29 +1,49 @@
 declare module '@strudel/core' {
   export class Cyclist {
-    constructor(options: {
-      interval: number;
-      onTrigger: (hap: any, deadline: number, duration: number, cps: number) => void;
-      onSchedule?: () => void;
-      getTime: () => number;
-    });
-    setStarted(started: boolean, cps?: number): void;
-    setPattern(pattern: any, autostart?: boolean): void;
+    constructor(options: any);
+    started: boolean;
+    cps: number;
+    pattern: any;
+    setStarted(started: boolean): void;
+    start(): Promise<void>;
+    stop(): void;
+    pause(): void;
+    setPattern(pat: any, autostart?: boolean): Promise<void>;
+    setCps(cps?: number): void;
+    now(): number;
   }
+  export function repl(options: any): any;
   export function stack(...patterns: any[]): any;
   export function cat(...patterns: any[]): any;
   export function silence(): any;
+  export function evalScope(...modules: any[]): Promise<any>;
+  export class Pattern {
+    queryArc(begin: number, end: number, options?: any): any[];
+  }
+  export const s: any;
+  export const sound: any;
+  export const note: any;
 }
 
 declare module '@strudel/mini' {
-  export function mini(code: string): any;
+  export function mini(...strings: string[]): any;
+  export function miniAllStrings(): void;
+  export function m(str: string, offset?: number): any;
+  export function h(str: string): any;
+  export function minify(thing: any): any;
 }
 
 declare module '@strudel/webaudio' {
-  export function initAudioOnFirstClick(): void;
+  export function webaudioOutput(hap: any, deadline: number, duration: number, cps: number, t?: number): void;
+  export function webaudioRepl(options?: any): any;
+  export function renderPatternAudio(...args: any[]): Promise<void>;
   export function getAudioContext(): AudioContext;
-  export function webaudioOutput(hap: any, deadline: number, duration: number, cps: number): void;
-  export function registerSynthSounds(): Promise<void>;
-  export function registerSound(name: string, handler: (time: number, hapValue: any, currentTime: number) => { node: AudioNode; stop?: (time: number) => void }): void;
+  export function setAudioContext(ctx: AudioContext | null): void;
+  export function initAudio(options?: any): Promise<void>;
+  export function initAudioOnFirstClick(options?: any): Promise<void>;
+  export function registerSynthSounds(): void;
+  export function registerSound(key: string, onTrigger: (time: number, hapValue: any, currentTime: number) => any, data?: any): void;
+  export function samples(sampleMap: string | Record<string, any>, baseUrl?: string, options?: any): Promise<void>;
 }
 
 declare module '@strudel/tonal' {}

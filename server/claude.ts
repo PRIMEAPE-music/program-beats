@@ -106,7 +106,7 @@ function buildContextBlock(context?: GenerateContext): string {
   if (context.genre) {
     block += `\n- Genre: ${context.genre}`;
   }
-  if (context.existingTracks.length > 0) {
+  if (context.existingTracks && context.existingTracks.length > 0) {
     block += `\n- Existing tracks:`;
     for (const t of context.existingTracks) {
       block += `\n  - ${t.name} (${t.type}): ${t.pattern}`;

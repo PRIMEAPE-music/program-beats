@@ -1,18 +1,16 @@
-import { Cyclist } from '@strudel/core';
-import { mini } from '@strudel/mini';
-import { initAudioOnFirstClick, getAudioContext, webaudioOutput, registerSynthSounds } from '@strudel/webaudio';
-import '@strudel/tonal';
+import { evalScope } from '@strudel/core';
+import * as core from '@strudel/core';
+import * as mini from '@strudel/mini';
+import * as webaudio from '@strudel/webaudio';
+import { webaudioRepl, initAudio, getAudioContext, registerSynthSounds, samples } from '@strudel/webaudio';
+import * as tonal from '@strudel/tonal';
 import type { TrackEffects, MasterEffects } from './types';
 
 /**
  * StrudelEngine wraps Strudel's WebAudio capabilities for multi-track playback.
  *
- * Approach:
- * - Uses @strudel/core Cyclist as the scheduler/clock.
- * - Evaluates Strudel mini-notation strings via the `mini()` function.
- * - Stacks per-track patterns with gain/mute applied, then feeds the
- *   combined pattern to the Cyclist for playback.
- * - Exposes transport controls (play/stop/pause) and per-track mixing.
+ * Uses webaudioRepl() which properly sets up the Cyclist scheduler with
+ * webaudioOutput as the default output, and provides evaluate/start/stop/setCps.
  */
 
 interface TrackState {
@@ -23,8 +21,20 @@ interface TrackState {
   effects?: TrackEffects;
 }
 
+interface StrudelRepl {
+  scheduler: any;
+  evaluate: (code: string, autostart?: boolean) => Promise<any>;
+  start: () => void;
+  stop: () => void;
+  pause: () => void;
+  setCps: (cps: number) => void;
+  setPattern: (pattern: any, autostart?: boolean) => Promise<any>;
+  toggle: () => void;
+  state: any;
+}
+
 export class StrudelEngine {
-  private cyclist: Cyclist | null = null;
+  private repl: StrudelRepl | null = null;
   private audioContext: AudioContext | null = null;
   private tracks: Map<string, TrackState> = new Map();
   private bpm: number = 120;
@@ -34,63 +44,71 @@ export class StrudelEngine {
 
   // ─── Lifecycle ──────────────────────────────────────────────
 
-  /**
-   * Initialize the audio context and register default sounds.
-   * Must be called in response to a user gesture (click/tap).
-   */
   async init(): Promise<void> {
     if (this.initialized) return;
 
-    // Strudel helper that defers AudioContext creation until first click
-    initAudioOnFirstClick();
+    console.log('[StrudelEngine] Initializing...');
 
-    // Obtain (or create) the shared AudioContext
+    // Register all Strudel functions on globalThis so evaluate() can find them
+    await evalScope(
+      core,
+      mini,
+      webaudio,
+      tonal,
+    );
+    console.log('[StrudelEngine] evalScope done, globalThis.s:', typeof (globalThis as any).s);
+
+    // Enable mini-notation parsing for double-quoted strings in evaluate()
+    if (typeof mini.miniAllStrings === 'function') {
+      mini.miniAllStrings();
+      console.log('[StrudelEngine] miniAllStrings registered');
+    }
+
+    // Initialize audio (must be called during a user gesture)
+    await initAudio();
+    console.log('[StrudelEngine] initAudio done');
+
+    // Register built-in synth oscillator sounds (sine, sawtooth, triangle, square, etc.)
+    registerSynthSounds();
+    console.log('[StrudelEngine] registerSynthSounds done');
+
+    // Load drum/instrument samples from Strudel's default sample bank
+    await samples('github:tidalcycles/dirt-samples');
+    console.log('[StrudelEngine] dirt-samples loaded');
+
     this.audioContext = getAudioContext();
+    console.log('[StrudelEngine] audioContext state:', this.audioContext?.state);
 
-    // Register built-in synth sounds so "sine", "sawtooth", etc. work
-    await registerSynthSounds();
+    // Create the repl — this sets up Cyclist + webaudioOutput properly
+    this.repl = webaudioRepl() as StrudelRepl;
+    console.log('[StrudelEngine] repl created');
 
-    // Create the Cyclist scheduler – it drives the pattern clock
-    this.cyclist = new Cyclist({
-      interval: 0.1,
-      onTrigger: (hap, deadline, duration, cps) => {
-        // Route each hap through Strudel's webaudio output
-        if (this.audioContext) {
-          webaudioOutput(hap, deadline, duration, cps);
-        }
-      },
-      onSchedule: () => {},
-      getTime: () => this.audioContext?.currentTime ?? 0,
-    });
+    // Set initial CPS (cycles per second: bpm / 60 / 4 for 4-beat cycles)
+    this.repl.setCps(this.bpm / 60 / 4);
 
     this.initialized = true;
+    console.log('[StrudelEngine] Initialized successfully');
   }
 
   // ─── Transport ──────────────────────────────────────────────
 
-  play(): void {
-    if (!this.cyclist) {
+  async play(): Promise<void> {
+    if (!this.repl) {
       console.warn('StrudelEngine: call init() before play()');
       return;
     }
 
-    this.rebuildAndSetPattern();
-
-    const cps = this.bpm / 60 / 4; // cycles per second (1 cycle = 4 beats = 1 bar)
-    this.cyclist.setStarted(true, cps);
+    await this.rebuildAndSetPattern();
     this.isPlaying = true;
   }
 
   stop(): void {
-    if (!this.cyclist) return;
-    this.cyclist.setStarted(false);
+    if (!this.repl) return;
+    this.repl.stop();
     this.isPlaying = false;
   }
 
   pause(): void {
-    // Strudel's Cyclist doesn't have a native pause – we stop without
-    // resetting position. A future enhancement could store/restore the
-    // cycle position.
     this.stop();
   }
 
@@ -102,9 +120,8 @@ export class StrudelEngine {
 
   setBpm(bpm: number): void {
     this.bpm = bpm;
-    if (this.isPlaying && this.cyclist) {
-      const cps = this.bpm / 60 / 4;
-      this.cyclist.setStarted(true, cps);
+    if (this.repl) {
+      this.repl.setCps(this.bpm / 60 / 4);
     }
   }
 
@@ -114,10 +131,6 @@ export class StrudelEngine {
 
   // ─── Per-track pattern management ───────────────────────────
 
-  /**
-   * Set or update the Strudel mini-notation pattern for a track.
-   * If the engine is currently playing the combined pattern is rebuilt live.
-   */
   updatePattern(trackId: string, pattern: string): void {
     const existing = this.tracks.get(trackId);
     if (existing) {
@@ -185,28 +198,17 @@ export class StrudelEngine {
 
   // ─── Pattern building ───────────────────────────────────────
 
-  /**
-   * Build a combined Strudel pattern string from all active (non-muted,
-   * respecting solo) tracks, then feed it to the Cyclist.
-   */
-  private rebuildAndSetPattern(): void {
+  private async rebuildAndSetPattern(): Promise<void> {
     const combined = this.buildCombinedPattern();
-    if (!combined || !this.cyclist) return;
+    if (!combined || !this.repl) return;
 
     try {
-      const pattern = mini(combined);
-      this.cyclist.setPattern(pattern, true);
+      await this.repl.evaluate(combined, true);
     } catch (err) {
       console.error('StrudelEngine: pattern evaluation error', err);
     }
   }
 
-  /**
-   * Build a single Strudel mini-notation string that stacks all audible
-   * tracks. Each track's pattern is wrapped with `.gain(volume)`.
-   *
-   * Solo logic: if *any* track is soloed, only soloed tracks are heard.
-   */
   buildCombinedPattern(): string | null {
     const entries = Array.from(this.tracks.entries());
     if (entries.length === 0) return null;
@@ -223,7 +225,6 @@ export class StrudelEngine {
     const parts = audible.map(([, t]) => {
       const gainStr = t.volume < 1 ? `.gain(${t.volume.toFixed(2)})` : '';
 
-      // Build per-track effect modifiers (only non-default values)
       let fxStr = '';
       if (t.effects) {
         if (t.effects.delay > 0) fxStr += `.delay(${t.effects.delay.toFixed(2)})`;
@@ -233,7 +234,6 @@ export class StrudelEngine {
         if (t.effects.distortion > 0) fxStr += `.distortion(${t.effects.distortion.toFixed(2)})`;
       }
 
-      // Wrap each track pattern in parentheses to keep operator precedence
       return `(${t.pattern})${gainStr}${fxStr}`;
     });
 
@@ -244,7 +244,6 @@ export class StrudelEngine {
       combined = `stack(${parts.join(', ')})`;
     }
 
-    // Apply master effects (only non-default values)
     const me = this.masterEffects;
     if (me.reverb > 0) combined += `.room(${me.reverb.toFixed(2)})`;
     if (me.delay > 0) combined += `.delay(${me.delay.toFixed(2)})`;
@@ -253,41 +252,33 @@ export class StrudelEngine {
     return combined;
   }
 
-  /**
-   * Evaluate an arbitrary Strudel code string and play it immediately.
-   * Useful for previewing a single pattern without touching tracks.
-   */
-  previewPattern(code: string): void {
-    if (!this.cyclist) {
+  async previewPattern(code: string): Promise<void> {
+    if (!this.repl) {
       console.warn('StrudelEngine: call init() before previewPattern()');
       return;
     }
 
     try {
-      const pattern = mini(code);
-      const cps = this.bpm / 60 / 4;
-      this.cyclist.setPattern(pattern, true);
-      this.cyclist.setStarted(true, cps);
+      this.repl.setCps(this.bpm / 60 / 4);
+      await this.repl.evaluate(code, true);
       this.isPlaying = true;
     } catch (err) {
       console.error('StrudelEngine: preview pattern error', err);
     }
   }
 
-  /**
-   * Play a pre-built combined pattern string (e.g. from the Scheduler).
-   */
-  playPatternString(patternString: string): void {
-    if (!this.cyclist) {
+  async playPatternString(patternString: string): Promise<void> {
+    if (!this.repl) {
       console.warn('StrudelEngine: call init() before playPatternString()');
       return;
     }
 
     try {
-      const pattern = mini(patternString);
       const cps = this.bpm / 60 / 4;
-      this.cyclist.setPattern(pattern, true);
-      this.cyclist.setStarted(true, cps);
+      console.log('[StrudelEngine] playPatternString, cps:', cps, 'pattern:', patternString.slice(0, 200));
+      this.repl.setCps(cps);
+      const result = await this.repl.evaluate(patternString, true);
+      console.log('[StrudelEngine] evaluate result:', result);
       this.isPlaying = true;
     } catch (err) {
       console.error('StrudelEngine: playPatternString error', err);
@@ -307,7 +298,7 @@ export class StrudelEngine {
   dispose(): void {
     this.stop();
     this.tracks.clear();
-    this.cyclist = null;
+    this.repl = null;
     this.audioContext = null;
     this.initialized = false;
   }
