@@ -23,11 +23,17 @@ import { VariationGenerator } from './components/VariationGenerator';
 import { PianoRoll } from './components/PianoRoll';
 import { ResizablePanel } from './components/ResizablePanel';
 import { Visualizer } from './components/Visualizer';
+import { MixerView } from './components/MixerView';
+import { PatternLibrary } from './components/PatternLibrary';
 import { useProjectStore } from './store/projectStore';
 import { useUndoStore } from './store/undoMiddleware';
 import { useAudioEngine } from './hooks/useAudioEngine';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import type { TrackType } from './engine/types';
+import { useMIDIInput } from './hooks/useMIDIInput';
+import { DrumPad } from './components/DrumPad';
+import { Onboarding } from './components/Onboarding';
+import type { TrackType, Section } from './engine/types';
+import { TRACK_COLORS } from './engine/types';
 import type { GenreTemplate } from './engine/genreTemplates';
 
 export const App: React.FC = () => {
@@ -48,6 +54,9 @@ export const App: React.FC = () => {
   const setScaleConfig = useProjectStore((s) => s.setScaleConfig);
   const newProject = useProjectStore((s) => s.newProject);
   const showVisualizer = useProjectStore((s) => s.showVisualizer);
+  const showPatternLibrary = useProjectStore((s) => s.showPatternLibrary);
+  const togglePatternLibrary = useProjectStore((s) => s.togglePatternLibrary);
+  const addSection = useProjectStore((s) => s.addSection);
 
   const [showSampleManager, setShowSampleManager] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
@@ -60,6 +69,8 @@ export const App: React.FC = () => {
 
   const { initEngine, previewPattern, stopPreview } = useAudioEngine();
   const { undo, redo } = useUndoStore();
+  const { midiAvailable, connectedDevices: midiDevices } = useMIDIInput();
+  const midiConnected = midiAvailable && midiDevices.length > 0;
 
   // Keyboard shortcut handlers
   const togglePlayStop = useCallback(async () => {
@@ -167,6 +178,74 @@ export const App: React.FC = () => {
     setShowGenrePicker(false);
   }, [newProject, setBpm, setScaleConfig]);
 
+  const handleApplyGenreFullProject = useCallback((template: GenreTemplate) => {
+    // Calculate total bars from sections
+    const totalBars = template.sections.reduce((sum, s) => sum + s.bars, 0);
+
+    newProject();
+    setBpm(template.bpm);
+    setScaleConfig({ root: template.scaleRoot, scale: template.scaleName });
+
+    const store = useProjectStore.getState();
+
+    // Set totalBars
+    store.setProject({ ...store.project, totalBars: Math.max(totalBars, 16) });
+
+    // Add template tracks
+    for (const t of template.tracks) {
+      store.addTrack(t.name, t.type as TrackType);
+    }
+
+    const updatedState = useProjectStore.getState();
+    const templateTrackCount = template.tracks.length;
+    const allTracks = updatedState.project.tracks;
+    const templateTracks = allTracks.slice(allTracks.length - templateTrackCount);
+
+    // Section colors
+    const sectionColors = [
+      '#e74c3c', '#3498db', '#2ecc71', '#9b59b6',
+      '#f39c12', '#1abc9c', '#e67e22', '#e91e63',
+    ];
+
+    // Create sections and place clips at correct bar positions
+    let currentBar = 0;
+    template.sections.forEach((section, sectionIdx) => {
+      const sectionStart = currentBar;
+      const sectionEnd = currentBar + section.bars - 1;
+
+      // Add section marker
+      const sectionEntry: Section = {
+        id: crypto.randomUUID(),
+        name: section.name,
+        startBar: sectionStart,
+        endBar: sectionEnd,
+        color: sectionColors[sectionIdx % sectionColors.length],
+      };
+      store.addSection(sectionEntry);
+
+      // Place clips for each track in this section
+      for (let i = 0; i < templateTrackCount; i++) {
+        const trackDef = template.tracks[i];
+        const track = templateTracks[i];
+        if (!track) continue;
+
+        const clip = {
+          id: crypto.randomUUID(),
+          name: `${trackDef.name} - ${section.name}`,
+          pattern: trackDef.pattern,
+          color: sectionColors[sectionIdx % sectionColors.length],
+          durationBars: section.bars,
+        };
+        store.addClip(clip);
+        store.placeClip(track.id, sectionStart, clip.id);
+      }
+
+      currentBar += section.bars;
+    });
+
+    setShowGenrePicker(false);
+  }, [newProject, setBpm, setScaleConfig]);
+
   return (
     <div className="app-layout">
       <Transport
@@ -178,6 +257,8 @@ export const App: React.FC = () => {
         onOpenSongGenerator={() => setShowSongGenerator(true)}
         onOpenMixingSuggestions={() => setShowMixingSuggestions(true)}
         onOpenProjectBrowser={() => setShowProjectBrowser(true)}
+        midiConnected={midiConnected}
+        midiDevices={midiDevices}
       />
 
       <ResizablePanel
@@ -229,6 +310,7 @@ export const App: React.FC = () => {
             <VariationGenerator />
           </>
         )}
+        <MixerView />
       </div>
 
       <ResizablePanel
@@ -257,6 +339,7 @@ export const App: React.FC = () => {
         <GenreTemplatePicker
           onClose={() => setShowGenrePicker(false)}
           onApply={handleApplyGenreTemplate}
+          onApplyFullProject={handleApplyGenreFullProject}
         />
       )}
       {showSongGenerator && (
@@ -277,6 +360,16 @@ export const App: React.FC = () => {
       {showPianoRoll && selectedClipId && (
         <PianoRoll onClose={() => setShowPianoRoll(false)} />
       )}
+      {showPatternLibrary && (
+        <PatternLibrary
+          onClose={togglePatternLibrary}
+          onPreview={previewPattern}
+          onStopPreview={stopPreview}
+        />
+      )}
+
+      <DrumPad />
+      <Onboarding />
     </div>
   );
 };

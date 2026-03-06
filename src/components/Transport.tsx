@@ -16,6 +16,8 @@ interface TransportProps {
   onOpenSongGenerator: () => void;
   onOpenMixingSuggestions: () => void;
   onOpenProjectBrowser: () => void;
+  midiConnected?: boolean;
+  midiDevices?: string[];
 }
 
 export const Transport: React.FC<TransportProps> = ({
@@ -27,6 +29,8 @@ export const Transport: React.FC<TransportProps> = ({
   onOpenSongGenerator,
   onOpenMixingSuggestions,
   onOpenProjectBrowser,
+  midiConnected = false,
+  midiDevices = [],
 }) => {
   const project = useProjectStore((s) => s.project);
   const isPlaying = useProjectStore((s) => s.isPlaying);
@@ -42,6 +46,11 @@ export const Transport: React.FC<TransportProps> = ({
   const toggleMetronome = useProjectStore((s) => s.toggleMetronome);
   const showVisualizer = useProjectStore((s) => s.showVisualizer);
   const toggleVisualizer = useProjectStore((s) => s.toggleVisualizer);
+  const showMixer = useProjectStore((s) => s.showMixer);
+  const toggleMixer = useProjectStore((s) => s.toggleMixer);
+  const togglePatternLibrary = useProjectStore((s) => s.togglePatternLibrary);
+  const showDrumPad = useProjectStore((s) => s.showDrumPad);
+  const toggleDrumPad = useProjectStore((s) => s.toggleDrumPad);
   const addToast = useToastStore((s) => s.addToast);
   const { undo, redo, canUndo, canRedo } = useUndoStore();
   const [isSurprising, setIsSurprising] = useState(false);
@@ -183,6 +192,24 @@ export const Transport: React.FC<TransportProps> = ({
         >
           Viz
         </button>
+        <button
+          className={`btn btn-sm btn-mixer-toggle${showMixer ? ' active' : ''}`}
+          onClick={toggleMixer}
+          title={showMixer ? 'Hide Mixer' : 'Show Mixer'}
+        >
+          Mixer
+        </button>
+        <button
+          className={`btn btn-sm btn-pads-toggle${showDrumPad ? ' active' : ''}`}
+          onClick={toggleDrumPad}
+          title={showDrumPad ? 'Hide Drum Pads' : 'Show Drum Pads (A/S/D/F/G/H/J/K)'}
+        >
+          Pads
+        </button>
+        <div
+          className={`midi-indicator${midiConnected ? ' connected' : ''}`}
+          title={midiConnected ? `MIDI: ${midiDevices.join(', ')}` : 'No MIDI device connected'}
+        />
       </div>
 
       <div className="transport-right">
@@ -215,6 +242,9 @@ export const Transport: React.FC<TransportProps> = ({
         </button>
         <button className="btn btn-sm" onClick={onOpenGenres} title="Genre Templates">
           Genres
+        </button>
+        <button className="btn btn-sm" onClick={togglePatternLibrary} title="Pattern Library">
+          Library
         </button>
         <button className="btn btn-sm" onClick={onOpenMixingSuggestions} title="AI Mixing Suggestions">
           Mix AI

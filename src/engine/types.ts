@@ -27,15 +27,30 @@ export interface ScaleConfig {
   scale: string;      // e.g. "minor", "major", "dorian", "pentatonic"
 }
 
+export interface AutomationPoint {
+  bar: number;      // bar position (can be fractional for sub-bar precision)
+  value: number;    // 0-1 normalized value
+}
+
+export interface AutomationLane {
+  id: string;
+  trackId: string;
+  parameter: 'volume' | 'lpf' | 'hpf' | 'delay' | 'reverb' | 'distortion';
+  points: AutomationPoint[];
+  enabled: boolean;
+}
+
 export interface Track {
   id: string;
   name: string;
   type: TrackType;
   volume: number; // 0-1
+  pan: number; // 0-1, center = 0.5
   muted: boolean;
   solo: boolean;
   clips: Record<number, string>; // position (bar index) -> clip ID
   effects: TrackEffects;
+  automationLanes: AutomationLane[];
 }
 
 export type TrackType = 'drums' | 'bass' | 'melody' | 'chords' | 'fx' | 'custom';

@@ -1,4 +1,4 @@
-import type { Project, Track, Clip } from './types';
+import type { Project, Track, Clip, AutomationLane, AutomationPoint } from './types';
 
 /**
  * Scheduler manages the arrangement timeline. It inspects a Project's tracks,
@@ -86,11 +86,28 @@ export class Scheduler {
       if (anySoloed && !track.solo) continue;
       if (track.muted) continue;
 
-      const seqPattern = Scheduler.buildTrackSequence(track, clips, totalBars);
-      if (!seqPattern) continue;
+      const autoMods = Scheduler.getPerBarAutomationModifiers(track, totalBars);
+      const hasAutomation = autoMods.some((m) => m !== '');
 
-      const gainStr = track.volume < 1 ? `.gain(${track.volume.toFixed(2)})` : '';
-      trackPatterns.push(`(${seqPattern})${gainStr}`);
+      if (hasAutomation) {
+        // Build per-bar segments with automation applied to each bar
+        const seqPattern = Scheduler.buildTrackSequenceWithAutomation(track, clips, totalBars, autoMods);
+        if (!seqPattern) continue;
+
+        // Volume automation might already be in the automation lanes;
+        // only add static gain if there's no volume automation lane
+        const hasVolumeAutomation = (track.automationLanes || []).some(
+          (l) => l.enabled && l.parameter === 'volume' && l.points.length > 0
+        );
+        const gainStr = !hasVolumeAutomation && track.volume < 1 ? `.gain(${track.volume.toFixed(2)})` : '';
+        trackPatterns.push(`(${seqPattern})${gainStr}`);
+      } else {
+        const seqPattern = Scheduler.buildTrackSequence(track, clips, totalBars);
+        if (!seqPattern) continue;
+
+        const gainStr = track.volume < 1 ? `.gain(${track.volume.toFixed(2)})` : '';
+        trackPatterns.push(`(${seqPattern})${gainStr}`);
+      }
     }
 
     if (trackPatterns.length === 0) return 'silence';
@@ -158,6 +175,35 @@ export class Scheduler {
   }
 
   /**
+   * Build a per-bar sequence for a track with automation modifiers applied.
+   * Unlike buildTrackSequence which merges consecutive bars of the same clip,
+   * this produces one segment per bar so automation values can vary per bar.
+   */
+  static buildTrackSequenceWithAutomation(
+    track: Track,
+    clips: Record<string, Clip>,
+    totalBars: number,
+    autoMods: string[],
+  ): string | null {
+    const parts: string[] = [];
+    let allSilent = true;
+
+    for (let bar = 0; bar < totalBars; bar++) {
+      const clip = Scheduler.getActiveClipAtBar(track, clips, bar);
+      if (clip && clip.pattern && clip.pattern !== 'silence') {
+        allSilent = false;
+        parts.push(`(${clip.pattern})${autoMods[bar]}`);
+      } else {
+        parts.push('silence');
+      }
+    }
+
+    if (allSilent) return null;
+    if (parts.length === 1) return parts[0];
+    return `cat(${parts.join(', ')})`;
+  }
+
+  /**
    * Given that bar `bar` is covered by some clip on `track`, find the bar
    * position where that clip's placement starts.
    */
@@ -217,6 +263,82 @@ export class Scheduler {
     const section = project.sections.find((s) => s.id === sectionId);
     if (!section) return 'silence';
     return Scheduler.buildRangePattern(project, section.startBar, section.endBar);
+  }
+
+  // ─── Automation helpers ────────────────────────────────────
+
+  /**
+   * Linearly interpolate an automation lane's value at a given bar position.
+   * If the bar is before the first point, returns the first point's value.
+   * If after the last point, returns the last point's value.
+   */
+  static interpolateAutomation(lane: AutomationLane, bar: number): number {
+    const points = [...lane.points].sort((a, b) => a.bar - b.bar);
+    if (points.length === 0) return -1; // no automation
+    if (points.length === 1) return points[0].value;
+    if (bar <= points[0].bar) return points[0].value;
+    if (bar >= points[points.length - 1].bar) return points[points.length - 1].value;
+
+    // Find the two surrounding points
+    for (let i = 0; i < points.length - 1; i++) {
+      if (bar >= points[i].bar && bar <= points[i + 1].bar) {
+        const t = (bar - points[i].bar) / (points[i + 1].bar - points[i].bar);
+        return points[i].value + t * (points[i + 1].value - points[i].value);
+      }
+    }
+    return points[points.length - 1].value;
+  }
+
+  /**
+   * Build Strudel modifier string for a single automation parameter at a given value.
+   */
+  static automationModifier(parameter: string, value: number): string {
+    switch (parameter) {
+      case 'volume':
+        return `.gain(${value.toFixed(3)})`;
+      case 'lpf':
+        // Map 0-1 to 20-20000 Hz (exponential-ish mapping)
+        const lpfFreq = 20 * Math.pow(1000, value);
+        return `.lpf(${Math.round(lpfFreq)})`;
+      case 'hpf':
+        const hpfFreq = 20 * Math.pow(1000, value);
+        return `.hpf(${Math.round(hpfFreq)})`;
+      case 'delay':
+        return `.delay(${value.toFixed(3)})`;
+      case 'reverb':
+        return `.room(${value.toFixed(3)})`;
+      case 'distortion':
+        return `.distortion(${value.toFixed(3)})`;
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Build a per-bar automation pattern string for a track across totalBars.
+   * Returns modifier strings for each bar, or empty strings if no automation.
+   */
+  static getPerBarAutomationModifiers(
+    track: Track,
+    totalBars: number,
+  ): string[] {
+    const enabledLanes = (track.automationLanes || []).filter((l) => l.enabled && l.points.length > 0);
+    if (enabledLanes.length === 0) {
+      return Array(totalBars).fill('');
+    }
+
+    const modifiers: string[] = [];
+    for (let bar = 0; bar < totalBars; bar++) {
+      let barMod = '';
+      for (const lane of enabledLanes) {
+        const value = Scheduler.interpolateAutomation(lane, bar);
+        if (value >= 0) {
+          barMod += Scheduler.automationModifier(lane.parameter, value);
+        }
+      }
+      modifiers.push(barMod);
+    }
+    return modifiers;
   }
 
   // ─── Loop helper ────────────────────────────────────────────

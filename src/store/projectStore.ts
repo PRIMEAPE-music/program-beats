@@ -9,6 +9,8 @@ import type {
   Clip,
   Section,
   ChatMessage,
+  AutomationPoint,
+  AutomationLane,
 } from '../engine/types';
 
 const STORAGE_KEY = 'program-beats-project';
@@ -19,10 +21,12 @@ function createDefaultTrack(name: string, type: TrackType): Track {
     name,
     type,
     volume: 0.8,
+    pan: 0.5,
     muted: false,
     solo: false,
     clips: {},
     effects: { delay: 0, reverb: 0, lpf: 20000, hpf: 20, distortion: 0 },
+    automationLanes: [],
   };
 }
 
@@ -94,6 +98,11 @@ export interface ProjectState {
   // Clip variation actions
   addClipVariation: (clipId: string, pattern: string) => void;
   setActiveVariation: (clipId: string, variationIndex: number | undefined) => void;
+  // Automation lane actions
+  addAutomationLane: (trackId: string, parameter: AutomationLane['parameter']) => void;
+  removeAutomationLane: (trackId: string, laneId: string) => void;
+  updateAutomationPoints: (trackId: string, laneId: string, points: AutomationPoint[]) => void;
+  toggleAutomationLane: (trackId: string, laneId: string) => void;
   // Loop region
   loopRegion: { startBar: number; endBar: number } | null;
   setLoopRegion: (startBar: number, endBar: number) => void;
@@ -104,6 +113,17 @@ export interface ProjectState {
   // Visualizer
   showVisualizer: boolean;
   toggleVisualizer: () => void;
+  // Pattern Library
+  showPatternLibrary: boolean;
+  togglePatternLibrary: () => void;
+  // Mixer
+  showMixer: boolean;
+  toggleMixer: () => void;
+  // Drum Pad
+  showDrumPad: boolean;
+  toggleDrumPad: () => void;
+  // Pan
+  setTrackPan: (trackId: string, pan: number) => void;
   // Project management
   saveProject: () => void;
   loadProject: (id: string) => void;
@@ -121,6 +141,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   loopRegion: null,
   metronomeEnabled: false,
   showVisualizer: false,
+  showPatternLibrary: false,
+  showMixer: false,
+  showDrumPad: false,
 
   setProject: (project) => set({ project }),
 
@@ -428,6 +451,78 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       };
     }),
 
+  // Automation lane actions
+
+  addAutomationLane: (trackId, parameter) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                automationLanes: [
+                  ...t.automationLanes,
+                  {
+                    id: crypto.randomUUID(),
+                    trackId,
+                    parameter,
+                    points: [],
+                    enabled: true,
+                  } as AutomationLane,
+                ],
+              }
+            : t
+        ),
+      },
+    })),
+
+  removeAutomationLane: (trackId, laneId) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? { ...t, automationLanes: t.automationLanes.filter((l) => l.id !== laneId) }
+            : t
+        ),
+      },
+    })),
+
+  updateAutomationPoints: (trackId, laneId, points) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                automationLanes: t.automationLanes.map((l) =>
+                  l.id === laneId ? { ...l, points } : l
+                ),
+              }
+            : t
+        ),
+      },
+    })),
+
+  toggleAutomationLane: (trackId, laneId) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                automationLanes: t.automationLanes.map((l) =>
+                  l.id === laneId ? { ...l, enabled: !l.enabled } : l
+                ),
+              }
+            : t
+        ),
+      },
+    })),
+
   // Loop region
 
   setLoopRegion: (startBar, endBar) => set({ loopRegion: { startBar, endBar } }),
@@ -441,6 +536,30 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   // Visualizer
 
   toggleVisualizer: () => set((state) => ({ showVisualizer: !state.showVisualizer })),
+
+  // Pattern Library
+
+  togglePatternLibrary: () => set((state) => ({ showPatternLibrary: !state.showPatternLibrary })),
+
+  // Mixer
+
+  toggleMixer: () => set((state) => ({ showMixer: !state.showMixer })),
+
+  // Drum Pad
+
+  toggleDrumPad: () => set((state) => ({ showDrumPad: !state.showDrumPad })),
+
+  // Pan
+
+  setTrackPan: (trackId, pan) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, pan } : t
+        ),
+      },
+    })),
 
   // Project management
 

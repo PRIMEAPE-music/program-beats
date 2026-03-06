@@ -4,6 +4,7 @@ import { TRACK_COLORS, DEFAULT_CLIP_COLORS } from '../engine/types';
 import { PresetPicker } from './PresetPicker';
 import { SectionManager } from './SectionManager';
 import { ClipVisual } from './ClipVisual';
+import { AutomationLane, AddAutomationDropdown } from './AutomationLane';
 import type { TrackType } from '../engine/types';
 
 interface ContextMenuState {
@@ -66,10 +67,15 @@ export const Timeline: React.FC = () => {
   const [presetPicker, setPresetPicker] = useState<PresetPickerState | null>(null);
   const [resizeState, setResizeState] = useState<ResizeState | null>(null);
   const [loopDrag, setLoopDrag] = useState<LoopDragState | null>(null);
+  const [automationVisible, setAutomationVisible] = useState<Record<string, boolean>>({});
   const timelineRef = useRef<HTMLDivElement>(null);
   const dragDataRef = useRef<DragData | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
   const loopDragRef = useRef<LoopDragState | null>(null);
+
+  const toggleAutomationVisibility = useCallback((trackId: string) => {
+    setAutomationVisible((prev) => ({ ...prev, [trackId]: !prev[trackId] }));
+  }, []);
 
   const bars = Array.from({ length: project.totalBars }, (_, i) => i);
 
@@ -474,10 +480,21 @@ export const Timeline: React.FC = () => {
         {/* Track rows */}
         <div className="timeline-tracks">
           {project.tracks.map((track) => (
+            <div key={track.id} className="track-row-group">
             <div
-              key={track.id}
               className={`track-row${selectedTrackId === track.id ? ' selected' : ''}`}
             >
+              {/* Automation toggle button overlaid on left edge */}
+              <button
+                className={`btn-automation-toggle${automationVisible[track.id] ? ' active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleAutomationVisibility(track.id);
+                }}
+                title="Toggle automation lanes"
+              >
+                A
+              </button>
               {bars.map((bar) => {
                 const clipId = track.clips[bar];
                 const clip = clipId ? project.clips[clipId] : null;
@@ -583,6 +600,26 @@ export const Timeline: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+            {/* Automation lanes below the track row */}
+            {automationVisible[track.id] && (
+              <div className="automation-lanes-container">
+                {(track.automationLanes || []).map((lane) => (
+                  <AutomationLane
+                    key={lane.id}
+                    lane={lane}
+                    trackId={track.id}
+                    totalBars={project.totalBars}
+                  />
+                ))}
+                <div className="automation-add-row">
+                  <AddAutomationDropdown
+                    trackId={track.id}
+                    existingParams={(track.automationLanes || []).map((l) => l.parameter)}
+                  />
+                </div>
+              </div>
+            )}
             </div>
           ))}
 
