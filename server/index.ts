@@ -2,6 +2,10 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import routes from "./routes";
+import { initProviders } from "./ai-provider";
+
+// Initialize AI providers from environment variables
+initProviders();
 
 const app = express();
 const PORT = 3001;

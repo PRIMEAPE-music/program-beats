@@ -176,11 +176,11 @@ export const App: React.FC = () => {
 
       <ResizablePanel
         direction="horizontal"
-        initialSize={220}
-        minSize={160}
-        maxSize={350}
+        initialSize={343}
+        minSize={280}
+        maxSize={480}
         side="right"
-        storageKey="sidebar-width"
+        storageKey="sidebar-width-v3"
       >
         <div className="sidebar-inner">
           <div className="sidebar-header">

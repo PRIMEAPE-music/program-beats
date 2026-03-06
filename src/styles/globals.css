@@ -131,7 +131,7 @@ body {
 }
 
 .transport-bar .bpm-input {
-  width: 56px;
+  width: 78px;
   text-align: center;
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--border);
@@ -696,6 +696,22 @@ body {
   background: #2ecc71;
   border-radius: 50%;
   animation: pulse 2s infinite;
+}
+
+.ai-provider-select {
+  margin-left: auto;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.ai-provider-select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 @keyframes pulse {

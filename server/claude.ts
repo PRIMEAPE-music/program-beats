@@ -1,10 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
-const MODEL = "claude-sonnet-4-20250514";
+import { getClient } from "./ai-provider";
 
 const SYSTEM_PROMPT = `You are an expert music producer and live-coding musician who generates Strudel (TidalCycles for the browser) patterns. You deeply understand music theory — scales, chords, rhythm, arrangement — and you translate musical ideas into valid Strudel mini-notation code.
 
@@ -122,10 +116,9 @@ function buildContextBlock(context?: GenerateContext): string {
 }
 
 function parseResponse(text: string): PatternResult {
-  // Try to extract JSON from the response
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error("No JSON found in Claude response");
+    throw new Error("No JSON found in AI response");
   }
   const parsed = JSON.parse(jsonMatch[0]);
   if (!parsed.patterns || !Array.isArray(parsed.patterns)) {
@@ -139,22 +132,15 @@ export async function generatePatterns(
   context?: GenerateContext
 ): Promise<PatternResult> {
   const contextBlock = buildContextBlock(context);
+  const client = getClient();
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `${prompt}${contextBlock}`,
-      },
-    ],
+  const response = await client.generate({
+    systemPrompt: SYSTEM_PROMPT,
+    userPrompt: `${prompt}${contextBlock}`,
+    maxTokens: 1024,
   });
 
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
-  return parseResponse(text);
+  return parseResponse(response.text);
 }
 
 export async function refinePattern(
@@ -162,21 +148,15 @@ export async function refinePattern(
   currentPattern: string,
   trackType: string
 ): Promise<PatternResult> {
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `I have an existing ${trackType} pattern:\n\`${currentPattern}\`\n\nPlease refine it with this request: ${prompt}\n\nReturn the refined version as JSON with a single pattern in the patterns array, keeping trackType as "${trackType}".`,
-      },
-    ],
+  const client = getClient();
+
+  const response = await client.generate({
+    systemPrompt: SYSTEM_PROMPT,
+    userPrompt: `I have an existing ${trackType} pattern:\n\`${currentPattern}\`\n\nPlease refine it with this request: ${prompt}\n\nReturn the refined version as JSON with a single pattern in the patterns array, keeping trackType as "${trackType}".`,
+    maxTokens: 1024,
   });
 
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
-  return parseResponse(text);
+  return parseResponse(response.text);
 }
 
 export interface FullSongConfig {
@@ -206,14 +186,11 @@ export async function generateFullSong(
     ? `${config.scaleRoot} ${config.scaleName}`
     : "your choice of key";
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 4096,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Generate a FULL SONG with the following specifications:
+  const client = getClient();
+
+  const response = await client.generate({
+    systemPrompt: SYSTEM_PROMPT,
+    userPrompt: `Generate a FULL SONG with the following specifications:
 
 Prompt: ${prompt}
 BPM: ${config.bpm}
@@ -241,15 +218,12 @@ IMPORTANT: Respond ONLY with JSON in this exact shape:
 }
 
 Make sure every pattern is valid Strudel code. Create musically cohesive patterns that work together and vary meaningfully across sections.`,
-      },
-    ],
+    maxTokens: 4096,
   });
 
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonMatch = response.text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error("No JSON found in Claude response");
+    throw new Error("No JSON found in AI response");
   }
   const parsed = JSON.parse(jsonMatch[0]);
   if (!parsed.sections || !Array.isArray(parsed.sections)) {
@@ -277,14 +251,11 @@ export async function getMixingSuggestions(
     )
     .join("\n");
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Analyze the following mix and suggest improvements. Look for issues like:
+  const client = getClient();
+
+  const response = await client.generate({
+    systemPrompt: SYSTEM_PROMPT,
+    userPrompt: `Analyze the following mix and suggest improvements. Look for issues like:
 - Frequency clashes between tracks
 - Missing frequency ranges
 - Patterns that don't complement each other rhythmically
@@ -308,15 +279,12 @@ IMPORTANT: Respond ONLY with JSON in this exact shape:
 }
 
 Provide 3-6 actionable suggestions. If you include a fixPattern, it must be valid Strudel code.`,
-      },
-    ],
+    maxTokens: 2048,
   });
 
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonMatch = response.text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error("No JSON found in Claude response");
+    throw new Error("No JSON found in AI response");
   }
   const parsed = JSON.parse(jsonMatch[0]);
   if (!parsed.suggestions || !Array.isArray(parsed.suggestions)) {
@@ -333,19 +301,13 @@ export async function suggestArrangement(
     .map((t) => `- ${t.name} (${t.type}): ${t.pattern}`)
     .join("\n");
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `I have these tracks:\n${trackList}\n\nI need arrangement suggestions for these sections: ${sections.join(", ")}.\n\nFor each section, suggest pattern variations for each track. Return JSON where the patterns array contains one entry per track per section, with the description indicating which section it belongs to. For example, a description might be "Verse - muted kick, hihats only" or "Chorus - full beat with fills".`,
-      },
-    ],
+  const client = getClient();
+
+  const response = await client.generate({
+    systemPrompt: SYSTEM_PROMPT,
+    userPrompt: `I have these tracks:\n${trackList}\n\nI need arrangement suggestions for these sections: ${sections.join(", ")}.\n\nFor each section, suggest pattern variations for each track. Return JSON where the patterns array contains one entry per track per section, with the description indicating which section it belongs to. For example, a description might be "Verse - muted kick, hihats only" or "Chorus - full beat with fills".`,
+    maxTokens: 2048,
   });
 
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
-  return parseResponse(text);
+  return parseResponse(response.text);
 }

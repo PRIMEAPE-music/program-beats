@@ -1,7 +1,34 @@
 import { Router, Request, Response } from "express";
 import { generatePatterns, refinePattern, suggestArrangement, generateFullSong, getMixingSuggestions } from "./claude";
+import { setProvider, getProvider, getAvailableProviders, type AIProvider } from "./ai-provider";
 
 const router = Router();
+
+// ─── AI Provider routes ──────────────────────────────────
+
+router.get("/api/ai/provider", (_req: Request, res: Response) => {
+  res.json({
+    current: getProvider(),
+    available: getAvailableProviders(),
+  });
+});
+
+router.post("/api/ai/provider", (req: Request, res: Response) => {
+  try {
+    const { provider } = req.body;
+    if (!provider || typeof provider !== "string") {
+      res.status(400).json({ error: "provider is required" });
+      return;
+    }
+    setProvider(provider as AIProvider);
+    res.json({ current: getProvider() });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to set provider";
+    res.status(400).json({ error: message });
+  }
+});
+
+// ─── Pattern generation routes ───────────────────────────
 
 router.post("/api/generate", async (req: Request, res: Response) => {
   try {

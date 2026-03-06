@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useProjectStore } from '../store/projectStore';
+import { AIProviderSelector } from './AIProviderSelector';
 import type { ChatMessage, GeneratedPattern } from '../engine/types';
 
 export const ChatPanel: React.FC = () => {
@@ -168,6 +169,7 @@ export const ChatPanel: React.FC = () => {
       <div className="chat-panel-header">
         <span className="ai-dot" />
         AI Assistant
+        <AIProviderSelector />
         {selectedClip && (
           <button
             className={`btn btn-sm refine-toggle ${refineMode ? 'active' : ''}`}
