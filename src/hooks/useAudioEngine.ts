@@ -11,6 +11,7 @@ import { Scheduler } from '../engine/Scheduler';
 export function useAudioEngine() {
   const project = useProjectStore((s) => s.project);
   const isPlaying = useProjectStore((s) => s.isPlaying);
+  const metronomeEnabled = useProjectStore((s) => s.metronomeEnabled);
   const setPlaying = useProjectStore((s) => s.setPlaying);
   const setCurrentBar = useProjectStore((s) => s.setCurrentBar);
   const barIntervalRef = useRef<number | null>(null);
@@ -76,8 +77,18 @@ export function useAudioEngine() {
       // Build and play the full arrangement
       const arrangementPattern = Scheduler.buildArrangementPattern(project);
       console.log('[useAudioEngine] arrangement pattern:', arrangementPattern);
-      if (arrangementPattern && arrangementPattern !== 'silence') {
-        await strudelEngine.playPatternString(arrangementPattern);
+
+      // Include metronome click track if enabled
+      const metronomeOn = useProjectStore.getState().metronomeEnabled;
+      let finalPattern = arrangementPattern;
+      if (metronomeOn && arrangementPattern && arrangementPattern !== 'silence') {
+        finalPattern = `stack(${arrangementPattern}, s("click:0 ~ ~ ~").gain(0.3))`;
+      } else if (metronomeOn) {
+        finalPattern = `s("click:0 ~ ~ ~").gain(0.3)`;
+      }
+
+      if (finalPattern && finalPattern !== 'silence') {
+        await strudelEngine.playPatternString(finalPattern);
       } else {
         console.warn('[useAudioEngine] No audible pattern to play');
         setPlaying(false);
@@ -118,6 +129,25 @@ export function useAudioEngine() {
       }
     };
   }, [isPlaying]);
+
+  // Re-evaluate pattern when metronome is toggled during playback
+  useEffect(() => {
+    if (!isPlaying || !initializedRef.current) return;
+
+    const arrangementPattern = Scheduler.buildArrangementPattern(project);
+    if (!arrangementPattern || arrangementPattern === 'silence') {
+      if (metronomeEnabled) {
+        strudelEngine.playPatternString(`s("click:0 ~ ~ ~").gain(0.3)`);
+      }
+      return;
+    }
+
+    const finalPattern = metronomeEnabled
+      ? `stack(${arrangementPattern}, s("click:0 ~ ~ ~").gain(0.3))`
+      : arrangementPattern;
+
+    strudelEngine.playPatternString(finalPattern);
+  }, [metronomeEnabled]);
 
   // Preview a single pattern
   const previewPattern = useCallback(async (pattern: string) => {

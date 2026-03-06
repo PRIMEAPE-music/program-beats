@@ -164,6 +164,66 @@ export const ChatPanel: React.FC = () => {
     [selectedClipId, updateClip]
   );
 
+  const handleStyleTransfer = useCallback(
+    async (style: string) => {
+      if (!selectedClip || isChatLoading) return;
+
+      const userMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: `Style transfer: Make it "${style}"`,
+        timestamp: Date.now(),
+      };
+      addChatMessage(userMessage);
+      setChatLoading(true);
+
+      try {
+        const response = await fetch('/api/refine', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: `Transform this pattern to be ${style}. Keep the same track type and general structure but change the musical character to feel ${style}.`,
+            currentPattern: selectedClip.pattern,
+            trackType: selectedClipTrackType,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        const assistantMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: data.message || `Here is a ${style} version:`,
+          patterns: data.patterns as GeneratedPattern[] | undefined,
+          timestamp: Date.now(),
+        };
+        addChatMessage(assistantMessage);
+      } catch (err) {
+        const errorMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `Sorry, I encountered an error: ${err instanceof Error ? err.message : 'Unknown error'}. Make sure the server is running.`,
+          timestamp: Date.now(),
+        };
+        addChatMessage(errorMessage);
+      } finally {
+        setChatLoading(false);
+      }
+    },
+    [selectedClip, selectedClipTrackType, isChatLoading, addChatMessage, setChatLoading]
+  );
+
+  const STYLE_BUTTONS = [
+    { label: 'More Jazzy', style: 'more jazzy with swing, extended chords, and syncopation' },
+    { label: 'More Aggressive', style: 'more aggressive with heavier sounds, faster rhythms, and distortion' },
+    { label: 'More Minimal', style: 'more minimal with fewer notes, more space, and simplicity' },
+    { label: 'More Complex', style: 'more complex with additional subdivisions, polyrhythms, and intricate patterns' },
+  ];
+
   return (
     <div className="chat-panel">
       <div className="chat-panel-header">
@@ -266,6 +326,22 @@ export const ChatPanel: React.FC = () => {
           Send
         </button>
       </div>
+
+      {selectedClip && (
+        <div className="style-transfer-bar">
+          {STYLE_BUTTONS.map((sb) => (
+            <button
+              key={sb.label}
+              className="btn btn-sm btn-style-transfer"
+              onClick={() => handleStyleTransfer(sb.style)}
+              disabled={isChatLoading}
+              title={`Apply "${sb.label}" style to selected clip`}
+            >
+              {sb.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

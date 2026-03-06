@@ -1,7 +1,11 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { useUndoStore } from '../store/undoMiddleware';
+import { useToastStore } from '../hooks/useToast';
 import { BeatIndicator } from './BeatIndicator';
+import { TapTempo } from './TapTempo';
+import { GENRE_TEMPLATES } from '../engine/genreTemplates';
+import type { TrackType } from '../engine/types';
 
 interface TransportProps {
   onOpenSamples: () => void;
@@ -32,7 +36,15 @@ export const Transport: React.FC<TransportProps> = ({
   const setProject = useProjectStore((s) => s.setProject);
   const newProject = useProjectStore((s) => s.newProject);
   const saveProject = useProjectStore((s) => s.saveProject);
+  const addClip = useProjectStore((s) => s.addClip);
+  const placeClip = useProjectStore((s) => s.placeClip);
+  const metronomeEnabled = useProjectStore((s) => s.metronomeEnabled);
+  const toggleMetronome = useProjectStore((s) => s.toggleMetronome);
+  const showVisualizer = useProjectStore((s) => s.showVisualizer);
+  const toggleVisualizer = useProjectStore((s) => s.toggleVisualizer);
+  const addToast = useToastStore((s) => s.addToast);
   const { undo, redo, canUndo, canRedo } = useUndoStore();
+  const [isSurprising, setIsSurprising] = useState(false);
 
   const handlePlayStop = useCallback(async () => {
     await onInitEngine();
@@ -61,6 +73,64 @@ export const Transport: React.FC<TransportProps> = ({
       newProject();
     }
   }, [newProject]);
+
+  const handleSurpriseMe = useCallback(async () => {
+    if (isSurprising) return;
+    setIsSurprising(true);
+
+    const randomGenre = GENRE_TEMPLATES[Math.floor(Math.random() * GENRE_TEMPLATES.length)];
+
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Generate a ${randomGenre.name} beat at ${randomGenre.bpm} BPM in ${randomGenre.scaleRoot} ${randomGenre.scaleName}. Include patterns for drums, bass, melody, and chords. Make it sound authentic and interesting.`,
+          context: {
+            bpm: randomGenre.bpm,
+            genre: randomGenre.name,
+          },
+        }),
+      });
+
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+      const data = await response.json();
+      const patterns = data.patterns || [];
+
+      for (const pattern of patterns) {
+        const trackType = pattern.trackType as TrackType;
+        const matchingTrack = project.tracks.find((t) => t.type === trackType) || project.tracks[0];
+        if (!matchingTrack) continue;
+
+        let nextBar = 0;
+        while (matchingTrack.clips[nextBar] !== undefined && nextBar < project.totalBars) {
+          nextBar++;
+        }
+        if (nextBar >= project.totalBars) nextBar = 0;
+
+        const newClip = {
+          id: crypto.randomUUID(),
+          name: pattern.description?.slice(0, 30) || `${trackType} pattern`,
+          pattern: pattern.pattern,
+          color: '#e94560',
+          durationBars: 1,
+        };
+
+        addClip(newClip);
+        placeClip(matchingTrack.id, nextBar, newClip.id);
+      }
+
+      addToast(`Surprise! Generated ${randomGenre.name} patterns (${patterns.length} tracks)`, 'success');
+    } catch (err) {
+      addToast(
+        `Surprise failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        'error'
+      );
+    } finally {
+      setIsSurprising(false);
+    }
+  }, [isSurprising, project, addClip, placeClip, addToast]);
 
   return (
     <div className="transport-bar">
@@ -98,6 +168,21 @@ export const Transport: React.FC<TransportProps> = ({
             onChange={handleBpmChange}
           />
         </div>
+        <TapTempo />
+        <button
+          className={`btn btn-sm btn-metronome${metronomeEnabled ? ' active' : ''}`}
+          onClick={toggleMetronome}
+          title={metronomeEnabled ? 'Disable Metronome' : 'Enable Metronome'}
+        >
+          Metro
+        </button>
+        <button
+          className={`btn btn-sm btn-visualizer-toggle${showVisualizer ? ' active' : ''}`}
+          onClick={toggleVisualizer}
+          title={showVisualizer ? 'Hide Visualizer' : 'Show Visualizer'}
+        >
+          Viz
+        </button>
       </div>
 
       <div className="transport-right">
@@ -116,6 +201,14 @@ export const Transport: React.FC<TransportProps> = ({
           title="Redo (Ctrl+Shift+Z)"
         >
           Redo
+        </button>
+        <button
+          className="btn btn-sm btn-surprise"
+          onClick={handleSurpriseMe}
+          disabled={isSurprising}
+          title="Generate random AI patterns from a random genre"
+        >
+          {isSurprising ? 'Working...' : 'Surprise Me'}
         </button>
         <button className="btn btn-sm btn-accent" onClick={onOpenSongGenerator} title="AI Generate Full Song">
           AI Song

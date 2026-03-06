@@ -4,9 +4,10 @@ import { useProjectStore } from '../store/projectStore';
 interface PatternEditorProps {
   onPreview: (pattern: string) => void;
   onStopPreview: () => void;
+  onOpenGridEditor?: () => void;
 }
 
-export const PatternEditor: React.FC<PatternEditorProps> = ({ onPreview, onStopPreview }) => {
+export const PatternEditor: React.FC<PatternEditorProps> = ({ onPreview, onStopPreview, onOpenGridEditor }) => {
   const project = useProjectStore((s) => s.project);
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const updateClip = useProjectStore((s) => s.updateClip);
@@ -116,6 +117,11 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({ onPreview, onStopP
       />
 
       <div className="pattern-editor-actions">
+        {onOpenGridEditor && (
+          <button className="btn btn-sm" onClick={onOpenGridEditor} title="Open step sequencer grid editor">
+            Grid Editor
+          </button>
+        )}
         <button className="btn btn-sm" onClick={handlePreview}>
           {isPreviewing ? 'Stop' : 'Preview'}
         </button>

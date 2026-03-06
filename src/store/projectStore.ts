@@ -92,6 +92,12 @@ export interface ProjectState {
   // Clip variation actions
   addClipVariation: (clipId: string, pattern: string) => void;
   setActiveVariation: (clipId: string, variationIndex: number | undefined) => void;
+  // Metronome
+  metronomeEnabled: boolean;
+  toggleMetronome: () => void;
+  // Visualizer
+  showVisualizer: boolean;
+  toggleVisualizer: () => void;
   // Project management
   saveProject: () => void;
   loadProject: (id: string) => void;
@@ -106,6 +112,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   selectedClipId: null,
   chatMessages: [],
   isChatLoading: false,
+  metronomeEnabled: false,
+  showVisualizer: false,
 
   setProject: (project) => set({ project }),
 
@@ -374,6 +382,14 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         },
       };
     }),
+
+  // Metronome
+
+  toggleMetronome: () => set((state) => ({ metronomeEnabled: !state.metronomeEnabled })),
+
+  // Visualizer
+
+  toggleVisualizer: () => set((state) => ({ showVisualizer: !state.showVisualizer })),
 
   // Project management
 

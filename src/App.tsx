@@ -19,7 +19,10 @@ import { GenreTemplatePicker } from './components/GenreTemplatePicker';
 import { SongGenerator } from './components/SongGenerator';
 import { MixingSuggestions } from './components/MixingSuggestions';
 import { ProjectBrowser } from './components/ProjectBrowser';
+import { VariationGenerator } from './components/VariationGenerator';
+import { PianoRoll } from './components/PianoRoll';
 import { ResizablePanel } from './components/ResizablePanel';
+import { Visualizer } from './components/Visualizer';
 import { useProjectStore } from './store/projectStore';
 import { useUndoStore } from './store/undoMiddleware';
 import { useAudioEngine } from './hooks/useAudioEngine';
@@ -44,6 +47,7 @@ export const App: React.FC = () => {
   const setBpm = useProjectStore((s) => s.setBpm);
   const setScaleConfig = useProjectStore((s) => s.setScaleConfig);
   const newProject = useProjectStore((s) => s.newProject);
+  const showVisualizer = useProjectStore((s) => s.showVisualizer);
 
   const [showSampleManager, setShowSampleManager] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
@@ -52,6 +56,7 @@ export const App: React.FC = () => {
   const [showSongGenerator, setShowSongGenerator] = useState(false);
   const [showMixingSuggestions, setShowMixingSuggestions] = useState(false);
   const [showProjectBrowser, setShowProjectBrowser] = useState(false);
+  const [showPianoRoll, setShowPianoRoll] = useState(false);
 
   const { initEngine, previewPattern, stopPreview } = useAudioEngine();
   const { undo, redo } = useUndoStore();
@@ -105,6 +110,7 @@ export const App: React.FC = () => {
     setShowSongGenerator(false);
     setShowMixingSuggestions(false);
     setShowProjectBrowser(false);
+    setShowPianoRoll(false);
   }, [selectClip, selectTrack]);
 
   useKeyboardShortcuts({
@@ -207,12 +213,22 @@ export const App: React.FC = () => {
           </div>
           <MasterEffects />
           <ScaleSelector />
+          {showVisualizer && <Visualizer />}
         </div>
       </ResizablePanel>
 
       <div className="main-area">
         <Timeline />
-        {selectedClipId && <PatternEditor onPreview={previewPattern} onStopPreview={stopPreview} />}
+        {selectedClipId && (
+          <>
+            <PatternEditor
+              onPreview={previewPattern}
+              onStopPreview={stopPreview}
+              onOpenGridEditor={() => setShowPianoRoll(true)}
+            />
+            <VariationGenerator />
+          </>
+        )}
       </div>
 
       <ResizablePanel
@@ -257,6 +273,9 @@ export const App: React.FC = () => {
             setShowProjectBrowser(false);
           }}
         />
+      )}
+      {showPianoRoll && selectedClipId && (
+        <PianoRoll onClose={() => setShowPianoRoll(false)} />
       )}
     </div>
   );

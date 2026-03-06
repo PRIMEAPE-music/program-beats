@@ -293,6 +293,54 @@ Provide 3-6 actionable suggestions. If you include a fixPattern, it must be vali
   return parsed as MixingSuggestionsResult;
 }
 
+export interface VariationResult {
+  variations: Array<{
+    pattern: string;
+    description: string;
+  }>;
+}
+
+export async function generateVariations(
+  pattern: string,
+  trackType: string,
+  count: number = 4
+): Promise<VariationResult> {
+  const client = getClient();
+
+  const response = await client.generate({
+    systemPrompt: SYSTEM_PROMPT,
+    userPrompt: `I have an existing ${trackType} pattern:
+\`${pattern}\`
+
+Generate exactly ${count} creative variations of this pattern. Each variation should:
+- Keep the same general feel and track type
+- Be a meaningfully different take (vary rhythm, notes, effects, subdivisions, etc.)
+- Range from subtle changes to more dramatic reinterpretations
+- All be valid Strudel code
+
+IMPORTANT: Respond ONLY with JSON in this exact shape:
+{
+  "variations": [
+    {
+      "pattern": "<valid Strudel code>",
+      "description": "<short description of what changed>"
+    }
+  ]
+}`,
+    maxTokens: 1024,
+  });
+
+  const jsonMatch = response.text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error("No JSON found in AI response");
+  }
+  const parsed = JSON.parse(jsonMatch[0]);
+  if (!parsed.variations || !Array.isArray(parsed.variations)) {
+    throw new Error("Response missing 'variations' array");
+  }
+  return parsed as VariationResult;
+}
+
 export async function suggestArrangement(
   tracks: { name: string; type: string; pattern: string }[],
   sections: string[]

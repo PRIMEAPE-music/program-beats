@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { generatePatterns, refinePattern, suggestArrangement, generateFullSong, getMixingSuggestions } from "./claude";
+import { generatePatterns, refinePattern, suggestArrangement, generateFullSong, getMixingSuggestions, generateVariations } from "./claude";
 import { setProvider, getProvider, getAvailableProviders, type AIProvider } from "./ai-provider";
 
 const router = Router();
@@ -69,6 +69,27 @@ router.post("/api/refine", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Refine error:", err);
     res.status(500).json({ error: "Failed to refine pattern" });
+  }
+});
+
+router.post("/api/variations", async (req: Request, res: Response) => {
+  try {
+    const { pattern, trackType, count } = req.body;
+
+    if (!pattern || typeof pattern !== "string") {
+      res.status(400).json({ error: "pattern is required and must be a string" });
+      return;
+    }
+    if (!trackType || typeof trackType !== "string") {
+      res.status(400).json({ error: "trackType is required and must be a string" });
+      return;
+    }
+
+    const result = await generateVariations(pattern, trackType, count || 4);
+    res.json(result);
+  } catch (err) {
+    console.error("Variations error:", err);
+    res.status(500).json({ error: "Failed to generate variations" });
   }
 });
 
