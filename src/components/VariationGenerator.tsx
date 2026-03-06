@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useProjectStore } from '../store/projectStore';
+import { strudelEngine } from '../engine/StrudelEngine';
 
 interface Variation {
   pattern: string;
@@ -15,6 +16,18 @@ export const VariationGenerator: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [previewingPattern, setPreviewingPattern] = useState<string | null>(null);
+
+  const handlePreviewToggle = useCallback(async (patternCode: string) => {
+    if (previewingPattern === patternCode) {
+      strudelEngine.stop();
+      setPreviewingPattern(null);
+    } else {
+      strudelEngine.stop();
+      await strudelEngine.previewPattern(patternCode);
+      setPreviewingPattern(patternCode);
+    }
+  }, [previewingPattern]);
 
   const selectedClip = selectedClipId ? project.clips[selectedClipId] : null;
 
@@ -104,10 +117,17 @@ export const VariationGenerator: React.FC = () => {
           )}
 
           {variations.map((variation, idx) => (
-            <div key={idx} className="variation-item">
+            <div key={idx} className={`variation-item ${previewingPattern === variation.pattern ? 'previewing' : ''}`}>
               <div className="variation-desc">{variation.description}</div>
               <pre className="variation-pattern">{variation.pattern}</pre>
               <div className="variation-actions">
+                <button
+                  className={`preview-btn ${previewingPattern === variation.pattern ? 'active' : ''}`}
+                  onClick={() => handlePreviewToggle(variation.pattern)}
+                  title={previewingPattern === variation.pattern ? 'Stop preview' : 'Preview variation'}
+                >
+                  {previewingPattern === variation.pattern ? '\u25A0' : '\u25B6'}
+                </button>
                 <button
                   className="btn btn-sm btn-accent"
                   onClick={() => handleApply(variation)}

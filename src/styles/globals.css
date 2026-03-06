@@ -1218,6 +1218,33 @@ body {
   cursor: grabbing;
 }
 
+/* Alt+Drag copy mode */
+.track-cell.drag-copy {
+  background: rgba(46, 204, 113, 0.15) !important;
+  outline: 2px dashed #2ecc71;
+  outline-offset: -2px;
+  cursor: copy;
+}
+
+.drag-copy-indicator {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2ecc71;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
 /* ===== Export Dialog ===== */
 
 .export-dialog {
@@ -1993,4 +2020,216 @@ body {
 .btn-style-transfer:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ===== Preview Button ===== */
+
+.preview-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.preview-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--text);
+}
+
+.preview-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.preview-btn.active:hover {
+  background: #d6304a;
+}
+
+/* ===== Previewing Indicator ===== */
+
+.previewing {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent), 0 0 8px rgba(233, 69, 96, 0.3);
+  animation: preview-pulse 1.5s ease-in-out infinite;
+  border-radius: var(--radius);
+}
+
+@keyframes preview-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px var(--accent), 0 0 8px rgba(233, 69, 96, 0.3); }
+  50% { box-shadow: 0 0 0 1px var(--accent), 0 0 16px rgba(233, 69, 96, 0.5); }
+}
+
+/* ===== Mini Clip Rhythm Visualization ===== */
+
+.clip-rhythm-viz {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  width: 100%;
+  height: 10px;
+  margin-top: 1px;
+  padding: 0 1px;
+}
+
+.rhythm-step {
+  flex: 1;
+  height: 3px;
+  min-width: 0;
+  border-radius: 0.5px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rhythm-step-hit {
+  height: 100%;
+  opacity: 0.85;
+}
+
+/* ===== Clip Resize Handle ===== */
+
+.clip-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  background: rgba(255, 255, 255, 0.15);
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+  z-index: 3;
+}
+
+.clip:hover .clip-resize-handle {
+  opacity: 1;
+}
+
+.clip-resize-handle:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.clip-resizing {
+  outline: 2px solid rgba(255, 255, 255, 0.5) !important;
+  outline-offset: -1px;
+  z-index: 5 !important;
+}
+
+.clip-resizing .clip-resize-handle {
+  opacity: 1;
+  background: var(--accent);
+}
+
+.track-cell.resize-preview {
+  background: rgba(233, 69, 96, 0.12) !important;
+  outline: 1px dashed rgba(233, 69, 96, 0.4);
+  outline-offset: -1px;
+}
+
+.track-cell.covered-by-multibar {
+  pointer-events: auto;
+}
+
+/* ===== Timeline Ruler (Loop Region) ===== */
+
+.timeline-ruler {
+  display: flex;
+  position: sticky;
+  top: 22px; /* below section markers */
+  z-index: 5;
+  background: rgba(15, 52, 96, 0.6);
+  border-bottom: 1px solid var(--border);
+  min-height: 20px;
+  user-select: none;
+}
+
+.ruler-cell {
+  width: 80px;
+  min-width: 80px;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding: 3px 0;
+  border-right: 1px solid var(--grid-line);
+  cursor: crosshair;
+  transition: background 0.1s ease;
+  position: relative;
+}
+
+.ruler-cell:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ruler-cell.in-loop {
+  background: rgba(46, 204, 113, 0.15);
+  color: #2ecc71;
+}
+
+.ruler-cell.loop-dragging {
+  background: rgba(46, 204, 113, 0.25);
+  color: #2ecc71;
+}
+
+/* Loop region overlay on ruler */
+.loop-region {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(46, 204, 113, 0.12);
+  border-left: 2px solid #2ecc71;
+  border-right: 2px solid #2ecc71;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Loop region overlay on track area */
+.loop-region-tracks {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(46, 204, 113, 0.04);
+  border-left: 1px solid rgba(46, 204, 113, 0.3);
+  border-right: 1px solid rgba(46, 204, 113, 0.3);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ===== Copy Drag Indicator ===== */
+
+.drag-copy {
+  background: rgba(46, 204, 113, 0.15) !important;
+  outline: 2px dashed #2ecc71;
+  outline-offset: -2px;
+}
+
+.drag-copy-indicator {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  background: #2ecc71;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  pointer-events: none;
 }

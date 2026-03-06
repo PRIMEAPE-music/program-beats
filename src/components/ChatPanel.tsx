@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { AIProviderSelector } from './AIProviderSelector';
+import { strudelEngine } from '../engine/StrudelEngine';
 import type { ChatMessage, GeneratedPattern } from '../engine/types';
 
 export const ChatPanel: React.FC = () => {
@@ -18,7 +19,19 @@ export const ChatPanel: React.FC = () => {
 
   const [input, setInput] = useState('');
   const [refineMode, setRefineMode] = useState(false);
+  const [previewingPattern, setPreviewingPattern] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handlePreviewToggle = useCallback(async (patternCode: string) => {
+    if (previewingPattern === patternCode) {
+      strudelEngine.stop();
+      setPreviewingPattern(null);
+    } else {
+      strudelEngine.stop();
+      await strudelEngine.previewPattern(patternCode);
+      setPreviewingPattern(patternCode);
+    }
+  }, [previewingPattern]);
 
   // Get the selected clip details for refine mode
   const selectedClip = selectedClipId ? project.clips[selectedClipId] : null;
@@ -266,13 +279,20 @@ export const ChatPanel: React.FC = () => {
             <div>{msg.content}</div>
 
             {msg.patterns?.map((pattern, idx) => (
-              <div key={idx}>
+              <div key={idx} className={previewingPattern === pattern.pattern ? 'previewing' : ''}>
                 <pre className="pattern-block">{pattern.pattern}</pre>
                 <div className="pattern-meta">
                   <span className="pattern-desc">
                     {pattern.trackType}: {pattern.description}
                   </span>
-                  <div style={{ display: 'flex', gap: 4 }}>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <button
+                      className={`preview-btn ${previewingPattern === pattern.pattern ? 'active' : ''}`}
+                      onClick={() => handlePreviewToggle(pattern.pattern)}
+                      title={previewingPattern === pattern.pattern ? 'Stop preview' : 'Preview pattern'}
+                    >
+                      {previewingPattern === pattern.pattern ? '\u25A0' : '\u25B6'}
+                    </button>
                     {refineMode && selectedClipId && (
                       <button
                         className="btn btn-sm btn-accent"

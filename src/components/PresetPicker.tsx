@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import type { TrackType } from '../engine/types';
 import { PRESETS } from '../engine/presets';
+import { strudelEngine } from '../engine/StrudelEngine';
 
 interface PresetPickerProps {
   trackType: TrackType;
@@ -14,6 +15,19 @@ export const PresetPicker: React.FC<PresetPickerProps> = ({
   onClose,
 }) => {
   const [search, setSearch] = useState('');
+  const [previewingPattern, setPreviewingPattern] = useState<string | null>(null);
+
+  const handlePreviewToggle = useCallback(async (patternCode: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (previewingPattern === patternCode) {
+      strudelEngine.stop();
+      setPreviewingPattern(null);
+    } else {
+      strudelEngine.stop();
+      await strudelEngine.previewPattern(patternCode);
+      setPreviewingPattern(patternCode);
+    }
+  }, [previewingPattern]);
 
   const filtered = useMemo(() => {
     const byType = PRESETS.filter((p) => p.trackType === trackType);
@@ -51,10 +65,19 @@ export const PresetPicker: React.FC<PresetPickerProps> = ({
         {filtered.map((preset) => (
           <div
             key={preset.name}
-            className="preset-item"
+            className={`preset-item ${previewingPattern === preset.pattern ? 'previewing' : ''}`}
             onClick={() => onSelect(preset.pattern, preset.name)}
           >
-            <div className="preset-item-name">{preset.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div className="preset-item-name">{preset.name}</div>
+              <button
+                className={`preview-btn ${previewingPattern === preset.pattern ? 'active' : ''}`}
+                onClick={(e) => handlePreviewToggle(preset.pattern, e)}
+                title={previewingPattern === preset.pattern ? 'Stop preview' : 'Preview preset'}
+              >
+                {previewingPattern === preset.pattern ? '\u25A0' : '\u25B6'}
+              </button>
+            </div>
             <div className="preset-item-tags">
               {preset.tags.map((t) => (
                 <span key={t} className="preset-tag">

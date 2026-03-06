@@ -150,36 +150,84 @@ const FallbackVisual: React.FC<{ color: string }> = ({ color }) => {
   );
 };
 
+/**
+ * Parse a pattern string into a 16-step rhythm grid.
+ * Returns an array of 16 booleans indicating hits vs rests.
+ */
+function parseRhythmSteps(pattern: string): boolean[] {
+  const steps = new Array(16).fill(false);
+
+  // Extract the content inside the first function call like s("...") or note("...")
+  const innerMatch = pattern.match(/(?:s|note|n|sound)\s*\(\s*"([^"]+)"/);
+  const tokens = innerMatch ? innerMatch[1] : pattern;
+
+  // Split on whitespace to get individual tokens
+  const parts = tokens.trim().split(/\s+/);
+  if (parts.length === 0) return steps;
+
+  // Map each token position into the 16-step grid
+  const stepSize = 16 / parts.length;
+  parts.forEach((part, i) => {
+    const pos = Math.round(i * stepSize);
+    if (pos < 16 && part !== '~' && part !== '-' && part !== '.') {
+      steps[pos] = true;
+    }
+  });
+
+  return steps;
+}
+
+const RhythmViz: React.FC<{ pattern: string; color: string }> = ({ pattern, color }) => {
+  const steps = parseRhythmSteps(pattern);
+  const hasAnyHit = steps.some(Boolean);
+  if (!hasAnyHit) return null;
+
+  return (
+    <div className="clip-rhythm-viz">
+      {steps.map((hit, i) => (
+        <div
+          key={i}
+          className={`rhythm-step ${hit ? 'rhythm-step-hit' : ''}`}
+          style={hit ? { backgroundColor: color } : undefined}
+        />
+      ))}
+    </div>
+  );
+};
+
 export const ClipVisual: React.FC<ClipVisualProps> = ({ pattern, trackType, color }) => {
   if (!pattern || pattern.trim() === '') {
     return <FallbackVisual color={color} />;
   }
 
+  // Always render the rhythm viz alongside the existing visual
+  const rhythmViz = <RhythmViz pattern={pattern} color={color} />;
+
   if (trackType === 'drums') {
     const hits = parseDrumHits(pattern);
     if (hits.length > 0) {
-      return <DrumVisual pattern={pattern} />;
+      return <>{rhythmViz}<DrumVisual pattern={pattern} /></>;
     }
-    return <FallbackVisual color={color} />;
+    return <>{rhythmViz}<FallbackVisual color={color} /></>;
   }
 
   // Melodic types: bass, melody, chords
   if (trackType === 'bass' || trackType === 'melody' || trackType === 'chords') {
     const notes = parseNotes(pattern);
     if (notes.length > 0) {
-      return <MelodicVisual pattern={pattern} color={color} />;
+      return <>{rhythmViz}<MelodicVisual pattern={pattern} color={color} /></>;
     }
-    return <FallbackVisual color={color} />;
+    return <>{rhythmViz}<FallbackVisual color={color} /></>;
   }
 
   // fx, custom, or anything else
   const notes = parseNotes(pattern);
   if (notes.length > 0) {
-    return <MelodicVisual pattern={pattern} color={color} />;
+    return <>{rhythmViz}<MelodicVisual pattern={pattern} color={color} /></>;
   }
   const hits = parseDrumHits(pattern);
   if (hits.length > 0) {
-    return <DrumVisual pattern={pattern} />;
+    return <>{rhythmViz}<DrumVisual pattern={pattern} /></>;
   }
-  return <FallbackVisual color={color} />;
+  return <>{rhythmViz}<FallbackVisual color={color} /></>;
 };

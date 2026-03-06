@@ -76,6 +76,8 @@ export interface ProjectState {
   duplicateClip: (clipId: string, targetTrackId: string, targetBar: number) => void;
   // Move clip
   moveClip: (clipId: string, fromTrackId: string, fromBar: number, toTrackId: string, toBar: number) => void;
+  // Fill clip right
+  fillClipRight: (trackId: string, startBar: number) => void;
   // Section actions
   addSection: (section: Section) => void;
   removeSection: (sectionId: string) => void;
@@ -92,6 +94,10 @@ export interface ProjectState {
   // Clip variation actions
   addClipVariation: (clipId: string, pattern: string) => void;
   setActiveVariation: (clipId: string, variationIndex: number | undefined) => void;
+  // Loop region
+  loopRegion: { startBar: number; endBar: number } | null;
+  setLoopRegion: (startBar: number, endBar: number) => void;
+  clearLoopRegion: () => void;
   // Metronome
   metronomeEnabled: boolean;
   toggleMetronome: () => void;
@@ -112,6 +118,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   selectedClipId: null,
   chatMessages: [],
   isChatLoading: false,
+  loopRegion: null,
   metronomeEnabled: false,
   showVisualizer: false,
 
@@ -289,6 +296,44 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       };
     }),
 
+  // Fill clip right
+
+  fillClipRight: (trackId, startBar) =>
+    set((state) => {
+      const track = state.project.tracks.find((t) => t.id === trackId);
+      if (!track) return state;
+      const sourceClipId = track.clips[startBar];
+      if (!sourceClipId) return state;
+      const sourceClip = state.project.clips[sourceClipId];
+      if (!sourceClip) return state;
+
+      let newClips = { ...state.project.clips };
+      let trackClips = { ...track.clips };
+
+      for (let bar = startBar + 1; bar < state.project.totalBars; bar++) {
+        // Stop at the next existing clip
+        if (trackClips[bar]) break;
+        const newId = crypto.randomUUID();
+        const newClip = {
+          ...sourceClip,
+          id: newId,
+          name: `${sourceClip.name} ${bar + 1}`,
+        };
+        newClips[newId] = newClip;
+        trackClips[bar] = newId;
+      }
+
+      return {
+        project: {
+          ...state.project,
+          clips: newClips,
+          tracks: state.project.tracks.map((t) =>
+            t.id === trackId ? { ...t, clips: trackClips } : t
+          ),
+        },
+      };
+    }),
+
   // Section actions
 
   addSection: (section) =>
@@ -382,6 +427,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         },
       };
     }),
+
+  // Loop region
+
+  setLoopRegion: (startBar, endBar) => set({ loopRegion: { startBar, endBar } }),
+
+  clearLoopRegion: () => set({ loopRegion: null }),
 
   // Metronome
 

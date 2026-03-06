@@ -18,6 +18,7 @@ interface DragData {
   clipId: string;
   fromTrackId: string;
   fromBar: number;
+  isCopy: boolean;
 }
 
 interface PresetPickerState {
@@ -26,12 +27,26 @@ interface PresetPickerState {
   barIndex: number;
 }
 
+interface ResizeState {
+  clipId: string;
+  trackId: string;
+  startBar: number;
+  originalDuration: number;
+  currentDuration: number;
+}
+
+interface LoopDragState {
+  startBar: number;
+  currentBar: number;
+}
+
 export const Timeline: React.FC = () => {
   const project = useProjectStore((s) => s.project);
   const isPlaying = useProjectStore((s) => s.isPlaying);
   const currentBar = useProjectStore((s) => s.currentBar);
   const selectedTrackId = useProjectStore((s) => s.selectedTrackId);
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
+  const loopRegion = useProjectStore((s) => s.loopRegion);
   const selectTrack = useProjectStore((s) => s.selectTrack);
   const selectClip = useProjectStore((s) => s.selectClip);
   const addClip = useProjectStore((s) => s.addClip);
@@ -40,12 +55,21 @@ export const Timeline: React.FC = () => {
   const removeClip = useProjectStore((s) => s.removeClip);
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
   const moveClip = useProjectStore((s) => s.moveClip);
+  const fillClipRight = useProjectStore((s) => s.fillClipRight);
+  const updateClip = useProjectStore((s) => s.updateClip);
+  const setLoopRegion = useProjectStore((s) => s.setLoopRegion);
+  const clearLoopRegion = useProjectStore((s) => s.clearLoopRegion);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [dragOverCell, setDragOverCell] = useState<{ trackId: string; bar: number } | null>(null);
+  const [isCopyDrag, setIsCopyDrag] = useState(false);
   const [presetPicker, setPresetPicker] = useState<PresetPickerState | null>(null);
+  const [resizeState, setResizeState] = useState<ResizeState | null>(null);
+  const [loopDrag, setLoopDrag] = useState<LoopDragState | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const dragDataRef = useRef<DragData | null>(null);
+  const resizeRef = useRef<ResizeState | null>(null);
+  const loopDragRef = useRef<LoopDragState | null>(null);
 
   const bars = Array.from({ length: project.totalBars }, (_, i) => i);
 
@@ -61,6 +85,129 @@ export const Timeline: React.FC = () => {
     }
   }, [contextMenu, presetPicker]);
 
+  // ── Clip resize handlers ─────────────────────────────────────
+  useEffect(() => {
+    if (!resizeState) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizeRef.current || !timelineRef.current) return;
+      const timelineRect = timelineRef.current.getBoundingClientRect();
+      const scrollLeft = timelineRef.current.scrollLeft;
+      const relativeX = e.clientX - timelineRect.left + scrollLeft;
+      const barUnderCursor = Math.floor(relativeX / 80);
+      let newDuration = barUnderCursor - resizeRef.current.startBar + 1;
+      newDuration = Math.max(1, Math.min(newDuration, project.totalBars - resizeRef.current.startBar));
+
+      // Prevent collision with other clips on the same track
+      const track = project.tracks.find((t) => t.id === resizeRef.current!.trackId);
+      if (track) {
+        for (const [posStr] of Object.entries(track.clips)) {
+          const pos = Number(posStr);
+          if (pos > resizeRef.current.startBar && pos < resizeRef.current.startBar + newDuration) {
+            newDuration = pos - resizeRef.current.startBar;
+          }
+        }
+      }
+      newDuration = Math.max(1, newDuration);
+
+      if (newDuration !== resizeRef.current.currentDuration) {
+        resizeRef.current = { ...resizeRef.current, currentDuration: newDuration };
+        setResizeState({ ...resizeRef.current });
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (resizeRef.current) {
+        updateClip(resizeRef.current.clipId, { durationBars: resizeRef.current.currentDuration });
+      }
+      resizeRef.current = null;
+      setResizeState(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizeState, project.totalBars, project.tracks, updateClip]);
+
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent, clipId: string, trackId: string, startBar: number, currentDuration: number) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const state: ResizeState = {
+        clipId,
+        trackId,
+        startBar,
+        originalDuration: currentDuration,
+        currentDuration,
+      };
+      resizeRef.current = state;
+      setResizeState(state);
+    },
+    []
+  );
+
+  // ── Loop region drag handlers ────────────────────────────────
+  useEffect(() => {
+    if (!loopDrag) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!loopDragRef.current || !timelineRef.current) return;
+      const timelineRect = timelineRef.current.getBoundingClientRect();
+      const scrollLeft = timelineRef.current.scrollLeft;
+      const relativeX = e.clientX - timelineRect.left + scrollLeft;
+      const barUnderCursor = Math.max(0, Math.min(Math.floor(relativeX / 80), project.totalBars - 1));
+
+      if (barUnderCursor !== loopDragRef.current.currentBar) {
+        loopDragRef.current = { ...loopDragRef.current, currentBar: barUnderCursor };
+        setLoopDrag({ ...loopDragRef.current });
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (loopDragRef.current) {
+        const s = Math.min(loopDragRef.current.startBar, loopDragRef.current.currentBar);
+        const end = Math.max(loopDragRef.current.startBar, loopDragRef.current.currentBar);
+        if (s !== end) {
+          setLoopRegion(s, end + 1); // endBar is exclusive
+        }
+      }
+      loopDragRef.current = null;
+      setLoopDrag(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [loopDrag, project.totalBars, setLoopRegion]);
+
+  const handleRulerMouseDown = useCallback(
+    (e: React.MouseEvent, bar: number) => {
+      e.preventDefault();
+      const state: LoopDragState = { startBar: bar, currentBar: bar };
+      loopDragRef.current = state;
+      setLoopDrag(state);
+    },
+    []
+  );
+
+  const handleRulerDoubleClick = useCallback(() => {
+    clearLoopRegion();
+  }, [clearLoopRegion]);
+
+  // Compute loop drag range for highlighting
+  const loopDragRange = loopDrag
+    ? {
+        start: Math.min(loopDrag.startBar, loopDrag.currentBar),
+        end: Math.max(loopDrag.startBar, loopDrag.currentBar),
+      }
+    : null;
+
   // Find section for a given bar
   const getSectionForBar = useCallback(
     (bar: number) => {
@@ -71,19 +218,41 @@ export const Timeline: React.FC = () => {
     [project.sections]
   );
 
+  // Helper: check if a bar is covered by a multi-bar clip starting earlier
+  const getMultiBarClipCover = useCallback(
+    (track: typeof project.tracks[0], bar: number) => {
+      for (const [posStr, cId] of Object.entries(track.clips)) {
+        const pos = Number(posStr);
+        const clip = project.clips[cId];
+        if (!clip) continue;
+        if (pos < bar && bar < pos + clip.durationBars) {
+          return { clipId: cId, startBar: pos, clip };
+        }
+      }
+      return null;
+    },
+    [project.clips]
+  );
+
   const handleCellClick = useCallback(
     (trackId: string, barIndex: number) => {
+      if (resizeRef.current) return;
       selectTrack(trackId);
 
       const track = project.tracks.find((t) => t.id === trackId);
       if (!track) return;
 
+      // Check if covered by a multi-bar clip
+      const cover = getMultiBarClipCover(track, barIndex);
+      if (cover) {
+        selectClip(cover.clipId);
+        return;
+      }
+
       const existingClipId = track.clips[barIndex];
       if (existingClipId) {
-        // Select existing clip
         selectClip(existingClipId);
       } else {
-        // Open preset picker for empty cell
         const trackDef = project.tracks.find((t) => t.id === trackId);
         if (trackDef) {
           setPresetPicker({
@@ -94,7 +263,7 @@ export const Timeline: React.FC = () => {
         }
       }
     },
-    [project, selectTrack, selectClip]
+    [project, selectTrack, selectClip, getMultiBarClipCover]
   );
 
   const handlePresetSelect = useCallback(
@@ -150,7 +319,6 @@ export const Timeline: React.FC = () => {
   const handleRemoveClip = useCallback(() => {
     if (!contextMenu) return;
     removeClipPlacement(contextMenu.trackId, contextMenu.barIndex);
-    // If no other placement references this clip, remove the clip too
     const clipId = contextMenu.clipId;
     const otherPlacements = project.tracks.some((t) =>
       Object.entries(t.clips).some(
@@ -172,7 +340,6 @@ export const Timeline: React.FC = () => {
     if (!contextMenu) return;
     const track = project.tracks.find((t) => t.id === contextMenu.trackId);
     if (!track) return;
-    // Find next empty bar on same track
     let targetBar = contextMenu.barIndex + 1;
     while (targetBar < project.totalBars && track.clips[targetBar]) {
       targetBar++;
@@ -183,14 +350,24 @@ export const Timeline: React.FC = () => {
     setContextMenu(null);
   }, [contextMenu, project, duplicateClip]);
 
+  const handleFillRight = useCallback(() => {
+    if (!contextMenu) return;
+    fillClipRight(contextMenu.trackId, contextMenu.barIndex);
+    setContextMenu(null);
+  }, [contextMenu, fillClipRight]);
+
   // Drag and drop handlers
   const handleDragStart = useCallback(
     (e: React.DragEvent, trackId: string, barIndex: number, clipId: string) => {
-      dragDataRef.current = { clipId, fromTrackId: trackId, fromBar: barIndex };
-      e.dataTransfer.effectAllowed = 'move';
-      // Set a minimal drag image text so the browser shows something
+      if (resizeRef.current) {
+        e.preventDefault();
+        return;
+      }
+      const isCopy = e.altKey;
+      dragDataRef.current = { clipId, fromTrackId: trackId, fromBar: barIndex, isCopy };
+      e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
       e.dataTransfer.setData('text/plain', clipId);
-      // Add dragging class after a tick
+      setIsCopyDrag(isCopy);
       const target = e.currentTarget as HTMLElement;
       requestAnimationFrame(() => target.classList.add('dragging'));
     },
@@ -200,7 +377,8 @@ export const Timeline: React.FC = () => {
   const handleDragOver = useCallback(
     (e: React.DragEvent, trackId: string, bar: number) => {
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
+      const dragData = dragDataRef.current;
+      e.dataTransfer.dropEffect = dragData?.isCopy ? 'copy' : 'move';
       setDragOverCell({ trackId, bar });
     },
     []
@@ -214,21 +392,26 @@ export const Timeline: React.FC = () => {
     (e: React.DragEvent, trackId: string, bar: number) => {
       e.preventDefault();
       setDragOverCell(null);
+      setIsCopyDrag(false);
       const dragData = dragDataRef.current;
       if (!dragData) return;
-      // Don't drop on same cell
       if (dragData.fromTrackId === trackId && dragData.fromBar === bar) return;
-      // Don't drop on occupied cell
       const track = project.tracks.find((t) => t.id === trackId);
       if (track && track.clips[bar]) return;
-      moveClip(dragData.clipId, dragData.fromTrackId, dragData.fromBar, trackId, bar);
+
+      if (dragData.isCopy) {
+        duplicateClip(dragData.clipId, trackId, bar);
+      } else {
+        moveClip(dragData.clipId, dragData.fromTrackId, dragData.fromBar, trackId, bar);
+      }
       dragDataRef.current = null;
     },
-    [project.tracks, moveClip]
+    [project.tracks, moveClip, duplicateClip]
   );
 
   const handleDragEnd = useCallback(() => {
     setDragOverCell(null);
+    setIsCopyDrag(false);
     dragDataRef.current = null;
   }, []);
 
@@ -237,6 +420,33 @@ export const Timeline: React.FC = () => {
       <div className="timeline-inner">
         {/* Section markers above bar headers */}
         <SectionManager />
+
+        {/* Loop region ruler */}
+        <div className="timeline-ruler" onDoubleClick={handleRulerDoubleClick}>
+          {bars.map((bar) => {
+            const inLoop = loopRegion && bar >= loopRegion.startBar && bar < loopRegion.endBar;
+            const inDrag = loopDragRange && bar >= loopDragRange.start && bar <= loopDragRange.end;
+            return (
+              <div
+                key={bar}
+                className={`ruler-cell${inLoop ? ' in-loop' : ''}${inDrag ? ' loop-dragging' : ''}`}
+                onMouseDown={(e) => handleRulerMouseDown(e, bar)}
+              >
+                {bar + 1}
+              </div>
+            );
+          })}
+          {/* Loop region overlay on ruler */}
+          {loopRegion && (
+            <div
+              className="loop-region"
+              style={{
+                left: `${loopRegion.startBar * 80}px`,
+                width: `${(loopRegion.endBar - loopRegion.startBar) * 80}px`,
+              }}
+            />
+          )}
+        </div>
 
         {/* Bar number headers */}
         <div className="timeline-bar-headers">
@@ -275,14 +485,33 @@ export const Timeline: React.FC = () => {
                 const isDragOver =
                   dragOverCell?.trackId === track.id && dragOverCell?.bar === bar;
 
+                // Check if covered by multi-bar clip from an earlier bar
+                const multiBarCover = getMultiBarClipCover(track, bar);
+                const isCoveredByMultiBar = !!multiBarCover;
+
+                // Display duration (use resize state if actively resizing this clip)
+                const displayDuration =
+                  resizeState && clip && resizeState.clipId === clipId && resizeState.startBar === bar
+                    ? resizeState.currentDuration
+                    : clip?.durationBars ?? 1;
+
+                // Is this cell within a resize preview range?
+                const isResizePreview =
+                  resizeState &&
+                  resizeState.trackId === track.id &&
+                  bar > resizeState.startBar &&
+                  bar < resizeState.startBar + resizeState.currentDuration;
+
                 return (
                   <div
                     key={bar}
-                    className={`track-cell${clip ? ' has-clip' : ''}${isDragOver && !clip ? ' drag-over' : ''}`}
+                    className={`track-cell${clip ? ' has-clip' : ''}${isDragOver && !clip && !isCoveredByMultiBar ? ' drag-over' : ''}${isDragOver && !clip && isCopyDrag ? ' drag-copy' : ''}${isCoveredByMultiBar ? ' covered-by-multibar' : ''}${isResizePreview ? ' resize-preview' : ''}`}
                     onClick={() => handleCellClick(track.id, bar)}
                     onContextMenu={
                       clip
                         ? (e) => handleContextMenu(e, track.id, bar, clipId!)
+                        : isCoveredByMultiBar
+                        ? (e) => handleContextMenu(e, track.id, multiBarCover!.startBar, multiBarCover!.clipId)
                         : undefined
                     }
                     onDragOver={(e) => handleDragOver(e, track.id, bar)}
@@ -291,16 +520,17 @@ export const Timeline: React.FC = () => {
                   >
                     {clip ? (
                       <div
-                        className={`clip${selectedClipId === clipId ? ' selected' : ''}`}
+                        className={`clip${selectedClipId === clipId ? ' selected' : ''}${resizeState && resizeState.clipId === clipId ? ' clip-resizing' : ''}`}
                         style={{
                           backgroundColor: clip.color || trackColor,
                           width:
-                            clip.durationBars > 1
-                              ? `${clip.durationBars * 100}%`
+                            displayDuration > 1
+                              ? `calc(${displayDuration * 100}% + ${(displayDuration - 1) * 1}px)`
                               : '100%',
+                          zIndex: displayDuration > 1 ? 2 : undefined,
                         }}
-                        title={`${clip.name}\n${clip.pattern || '(empty pattern)'}`}
-                        draggable
+                        title={`${clip.name}\n${clip.pattern || '(empty pattern)'}\nDuration: ${displayDuration} bar${displayDuration > 1 ? 's' : ''}`}
+                        draggable={!resizeRef.current}
                         onDragStart={(e) =>
                           handleDragStart(e, track.id, bar, clipId!)
                         }
@@ -312,9 +542,21 @@ export const Timeline: React.FC = () => {
                           trackType={track.type}
                           color={clip.color || trackColor}
                         />
+                        {/* Resize handle on right edge */}
+                        <div
+                          className="clip-resize-handle"
+                          onMouseDown={(e) =>
+                            handleResizeStart(e, clipId!, track.id, bar, displayDuration)
+                          }
+                        />
                       </div>
+                    ) : isCoveredByMultiBar ? (
+                      null
                     ) : (
                       <div className="empty-cell-plus">+</div>
+                    )}
+                    {isDragOver && !clip && !isCoveredByMultiBar && isCopyDrag && (
+                      <div className="drag-copy-indicator">+</div>
                     )}
 
                     {/* Inline preset picker */}
@@ -351,6 +593,17 @@ export const Timeline: React.FC = () => {
               style={{ left: `${currentBar * 80 + 40}px` }}
             />
           )}
+
+          {/* Loop region overlay on tracks area */}
+          {loopRegion && (
+            <div
+              className="loop-region-tracks"
+              style={{
+                left: `${loopRegion.startBar * 80}px`,
+                width: `${(loopRegion.endBar - loopRegion.startBar) * 80}px`,
+              }}
+            />
+          )}
         </div>
       </div>
 
@@ -374,6 +627,12 @@ export const Timeline: React.FC = () => {
             onClick={handleDuplicateClip}
           >
             Duplicate
+          </div>
+          <div
+            className="context-menu-item"
+            onClick={handleFillRight}
+          >
+            Fill Right
           </div>
           <div
             className="context-menu-item danger"

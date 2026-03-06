@@ -41,6 +41,7 @@ export class StrudelEngine {
   private isPlaying: boolean = false;
   private initialized: boolean = false;
   private masterEffects: MasterEffects = { reverb: 0.1, delay: 0, compression: 0.3 };
+  private rebuildTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // ─── Lifecycle ──────────────────────────────────────────────
 
@@ -104,6 +105,10 @@ export class StrudelEngine {
 
   stop(): void {
     if (!this.repl) return;
+    if (this.rebuildTimeout !== null) {
+      clearTimeout(this.rebuildTimeout);
+      this.rebuildTimeout = null;
+    }
     this.repl.stop();
     this.isPlaying = false;
   }
@@ -144,14 +149,14 @@ export class StrudelEngine {
       });
     }
     if (this.isPlaying) {
-      this.rebuildAndSetPattern();
+      this.debouncedRebuild();
     }
   }
 
   removeTrack(trackId: string): void {
     this.tracks.delete(trackId);
     if (this.isPlaying) {
-      this.rebuildAndSetPattern();
+      this.debouncedRebuild();
     }
   }
 
@@ -161,7 +166,7 @@ export class StrudelEngine {
     const t = this.tracks.get(trackId);
     if (t) {
       t.volume = Math.max(0, Math.min(1, volume));
-      if (this.isPlaying) this.rebuildAndSetPattern();
+      if (this.isPlaying) this.debouncedRebuild();
     }
   }
 
@@ -169,7 +174,7 @@ export class StrudelEngine {
     const t = this.tracks.get(trackId);
     if (t) {
       t.muted = muted;
-      if (this.isPlaying) this.rebuildAndSetPattern();
+      if (this.isPlaying) this.debouncedRebuild();
     }
   }
 
@@ -177,7 +182,7 @@ export class StrudelEngine {
     const t = this.tracks.get(trackId);
     if (t) {
       t.solo = solo;
-      if (this.isPlaying) this.rebuildAndSetPattern();
+      if (this.isPlaying) this.debouncedRebuild();
     }
   }
 
@@ -187,13 +192,13 @@ export class StrudelEngine {
     const t = this.tracks.get(trackId);
     if (t) {
       t.effects = effects;
-      if (this.isPlaying) this.rebuildAndSetPattern();
+      if (this.isPlaying) this.debouncedRebuild();
     }
   }
 
   setMasterEffects(effects: MasterEffects): void {
     this.masterEffects = effects;
-    if (this.isPlaying) this.rebuildAndSetPattern();
+    if (this.isPlaying) this.debouncedRebuild();
   }
 
   // ─── Pattern building ───────────────────────────────────────
@@ -207,6 +212,21 @@ export class StrudelEngine {
     } catch (err) {
       console.error('StrudelEngine: pattern evaluation error', err);
     }
+  }
+
+  /**
+   * Debounced version of rebuildAndSetPattern for use during live playback.
+   * Collapses rapid successive calls (e.g. volume slider moves, effect tweaks)
+   * into a single rebuild after ~100ms of inactivity.
+   */
+  private debouncedRebuild(): void {
+    if (this.rebuildTimeout !== null) {
+      clearTimeout(this.rebuildTimeout);
+    }
+    this.rebuildTimeout = setTimeout(() => {
+      this.rebuildTimeout = null;
+      this.rebuildAndSetPattern();
+    }, 100);
   }
 
   buildCombinedPattern(): string | null {
@@ -297,6 +317,10 @@ export class StrudelEngine {
 
   dispose(): void {
     this.stop();
+    if (this.rebuildTimeout !== null) {
+      clearTimeout(this.rebuildTimeout);
+      this.rebuildTimeout = null;
+    }
     this.tracks.clear();
     this.repl = null;
     this.audioContext = null;

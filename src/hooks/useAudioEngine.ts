@@ -7,6 +7,7 @@ import { Scheduler } from '../engine/Scheduler';
  * Hook that bridges the Zustand store and the StrudelEngine.
  * Keeps the engine in sync with project state (tracks, clips, mute/solo/volume, BPM).
  * Handles play/stop commands and bar position tracking.
+ * Supports loop region: when a loopRegion is set, plays only that range.
  */
 export function useAudioEngine() {
   const project = useProjectStore((s) => s.project);
@@ -74,9 +75,18 @@ export function useAudioEngine() {
       }
       if (cancelled) return;
 
-      // Build and play the full arrangement
-      const arrangementPattern = Scheduler.buildArrangementPattern(project);
-      console.log('[useAudioEngine] arrangement pattern:', arrangementPattern);
+      // Check for loop region
+      const loopRegion = useProjectStore.getState().loopRegion;
+
+      // Build arrangement pattern: use range if loop region is set
+      let arrangementPattern: string;
+      if (loopRegion) {
+        arrangementPattern = Scheduler.buildRangePattern(project, loopRegion.startBar, loopRegion.endBar);
+        console.log('[useAudioEngine] loop region pattern:', arrangementPattern, `bars ${loopRegion.startBar}-${loopRegion.endBar}`);
+      } else {
+        arrangementPattern = Scheduler.buildArrangementPattern(project);
+        console.log('[useAudioEngine] arrangement pattern:', arrangementPattern);
+      }
 
       // Include metronome click track if enabled
       const metronomeOn = useProjectStore.getState().metronomeEnabled;
@@ -99,16 +109,33 @@ export function useAudioEngine() {
 
       // Track bar position
       const msPerBar = (60 / project.bpm) * 4 * 1000; // 4 beats per bar
-      let currentBar = 0;
-      setCurrentBar(0);
 
-      barIntervalRef.current = window.setInterval(() => {
-        currentBar++;
-        if (currentBar >= project.totalBars) {
-          currentBar = 0; // loop
-        }
+      if (loopRegion) {
+        // Loop within region bounds
+        let currentBar = loopRegion.startBar;
         setCurrentBar(currentBar);
-      }, msPerBar);
+        const regionLength = loopRegion.endBar - loopRegion.startBar;
+
+        barIntervalRef.current = window.setInterval(() => {
+          currentBar++;
+          if (currentBar >= loopRegion.endBar) {
+            currentBar = loopRegion.startBar; // loop back to region start
+          }
+          setCurrentBar(currentBar);
+        }, msPerBar);
+      } else {
+        // Normal full-arrangement playback
+        let currentBar = 0;
+        setCurrentBar(0);
+
+        barIntervalRef.current = window.setInterval(() => {
+          currentBar++;
+          if (currentBar >= project.totalBars) {
+            currentBar = 0; // loop
+          }
+          setCurrentBar(currentBar);
+        }, msPerBar);
+      }
     };
 
     if (isPlaying) {
@@ -134,7 +161,11 @@ export function useAudioEngine() {
   useEffect(() => {
     if (!isPlaying || !initializedRef.current) return;
 
-    const arrangementPattern = Scheduler.buildArrangementPattern(project);
+    const loopRegion = useProjectStore.getState().loopRegion;
+    const arrangementPattern = loopRegion
+      ? Scheduler.buildRangePattern(project, loopRegion.startBar, loopRegion.endBar)
+      : Scheduler.buildArrangementPattern(project);
+
     if (!arrangementPattern || arrangementPattern === 'silence') {
       if (metronomeEnabled) {
         strudelEngine.playPatternString(`s("click:0 ~ ~ ~").gain(0.3)`);
@@ -161,8 +192,10 @@ export function useAudioEngine() {
   const stopPreview = useCallback(() => {
     strudelEngine.stop();
     if (isPlaying) {
-      // Re-trigger the arrangement if we were playing
-      const arrangementPattern = Scheduler.buildArrangementPattern(project);
+      const loopRegion = useProjectStore.getState().loopRegion;
+      const arrangementPattern = loopRegion
+        ? Scheduler.buildRangePattern(project, loopRegion.startBar, loopRegion.endBar)
+        : Scheduler.buildArrangementPattern(project);
       if (arrangementPattern && arrangementPattern !== 'silence') {
         strudelEngine.playPatternString(arrangementPattern);
       }
