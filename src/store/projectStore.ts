@@ -66,6 +66,10 @@ export interface ProjectState {
   removeClip: (clipId: string) => void;
   placeClip: (trackId: string, barIndex: number, clipId: string) => void;
   removeClipPlacement: (trackId: string, barIndex: number) => void;
+  // Clip duplication
+  duplicateClip: (clipId: string, targetTrackId: string, targetBar: number) => void;
+  // Move clip
+  moveClip: (clipId: string, fromTrackId: string, fromBar: number, toTrackId: string, toBar: number) => void;
   // Section actions
   addSection: (section: Section) => void;
   removeSection: (sectionId: string) => void;
@@ -219,6 +223,50 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         }),
       },
     })),
+
+  // Clip duplication
+
+  duplicateClip: (clipId, targetTrackId, targetBar) =>
+    set((state) => {
+      const original = state.project.clips[clipId];
+      if (!original) return state;
+      const newId = crypto.randomUUID();
+      const newClip = { ...original, id: newId, name: original.name + ' (copy)' };
+      return {
+        project: {
+          ...state.project,
+          clips: { ...state.project.clips, [newId]: newClip },
+          tracks: state.project.tracks.map((t) =>
+            t.id === targetTrackId
+              ? { ...t, clips: { ...t.clips, [targetBar]: newId } }
+              : t
+          ),
+        },
+      };
+    }),
+
+  // Move clip
+
+  moveClip: (clipId, fromTrackId, fromBar, toTrackId, toBar) =>
+    set((state) => {
+      // Remove from old position, place in new position
+      const tracks = state.project.tracks.map((t) => {
+        let clips = { ...t.clips };
+        // Remove from old position
+        if (t.id === fromTrackId) {
+          const { [fromBar]: _, ...rest } = clips;
+          clips = rest;
+        }
+        // Place in new position
+        if (t.id === toTrackId) {
+          clips[toBar] = clipId;
+        }
+        return { ...t, clips };
+      });
+      return {
+        project: { ...state.project, tracks },
+      };
+    }),
 
   // Section actions
 

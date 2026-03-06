@@ -9,12 +9,24 @@ export const ChatPanel: React.FC = () => {
   const addChatMessage = useProjectStore((s) => s.addChatMessage);
   const setChatLoading = useProjectStore((s) => s.setChatLoading);
   const addClip = useProjectStore((s) => s.addClip);
+  const updateClip = useProjectStore((s) => s.updateClip);
   const placeClip = useProjectStore((s) => s.placeClip);
   const selectClip = useProjectStore((s) => s.selectClip);
   const selectTrack = useProjectStore((s) => s.selectTrack);
+  const selectedClipId = useProjectStore((s) => s.selectedClipId);
 
   const [input, setInput] = useState('');
+  const [refineMode, setRefineMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Get the selected clip details for refine mode
+  const selectedClip = selectedClipId ? project.clips[selectedClipId] : null;
+  // Find the track type for the selected clip
+  const selectedClipTrackType = selectedClipId
+    ? project.tracks.find((t) =>
+        Object.values(t.clips).includes(selectedClipId)
+      )?.type ?? 'custom'
+    : 'custom';
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -43,20 +55,36 @@ export const ChatPanel: React.FC = () => {
         patternCount: Object.keys(t.clips).length,
       }));
 
-      const response = await fetch('/api/generate', {
+      const isRefining = refineMode && selectedClip;
+
+      const endpoint = isRefining ? '/api/refine' : '/api/generate';
+      const body = isRefining
+        ? {
+            prompt: text,
+            context: {
+              bpm: project.bpm,
+              tracks: trackContext,
+              currentPattern: selectedClip.pattern,
+              trackType: selectedClipTrackType,
+              clipName: selectedClip.name,
+            },
+          }
+        : {
+            prompt: text,
+            context: {
+              bpm: project.bpm,
+              tracks: trackContext,
+              existingPatterns: Object.values(project.clips).map((c) => ({
+                name: c.name,
+                pattern: c.pattern,
+              })),
+            },
+          };
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: text,
-          context: {
-            bpm: project.bpm,
-            tracks: trackContext,
-            existingPatterns: Object.values(project.clips).map((c) => ({
-              name: c.name,
-              pattern: c.pattern,
-            })),
-          },
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -84,7 +112,7 @@ export const ChatPanel: React.FC = () => {
     } finally {
       setChatLoading(false);
     }
-  }, [input, isChatLoading, project, addChatMessage, setChatLoading]);
+  }, [input, isChatLoading, project, addChatMessage, setChatLoading, refineMode, selectedClip, selectedClipTrackType]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -127,12 +155,40 @@ export const ChatPanel: React.FC = () => {
     [project, addClip, placeClip, selectTrack, selectClip]
   );
 
+  const handleReplacePattern = useCallback(
+    (pattern: GeneratedPattern) => {
+      if (!selectedClipId) return;
+      updateClip(selectedClipId, { pattern: pattern.pattern });
+    },
+    [selectedClipId, updateClip]
+  );
+
   return (
     <div className="chat-panel">
       <div className="chat-panel-header">
         <span className="ai-dot" />
         AI Assistant
+        {selectedClip && (
+          <button
+            className={`btn btn-sm refine-toggle ${refineMode ? 'active' : ''}`}
+            onClick={() => setRefineMode(!refineMode)}
+            style={{ marginLeft: 'auto' }}
+            title="Toggle refine mode for selected clip"
+          >
+            {refineMode ? 'Refining' : 'Refine'}
+          </button>
+        )}
       </div>
+
+      {refineMode && selectedClip && (
+        <div className="refine-mode">
+          <div className="refine-mode-label">
+            Refining: <strong>{selectedClip.name}</strong>
+            <span className="shortcut-hint">({selectedClipTrackType})</span>
+          </div>
+          <pre className="refine-mode-pattern">{selectedClip.pattern}</pre>
+        </div>
+      )}
 
       <div className="chat-messages">
         {chatMessages.length === 0 && (
@@ -154,12 +210,22 @@ export const ChatPanel: React.FC = () => {
                   <span className="pattern-desc">
                     {pattern.trackType}: {pattern.description}
                   </span>
-                  <button
-                    className="btn btn-sm btn-accent"
-                    onClick={() => handleApplyPattern(pattern)}
-                  >
-                    Apply
-                  </button>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {refineMode && selectedClipId && (
+                      <button
+                        className="btn btn-sm btn-accent"
+                        onClick={() => handleReplacePattern(pattern)}
+                      >
+                        Replace
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-sm btn-accent"
+                      onClick={() => handleApplyPattern(pattern)}
+                    >
+                      Apply
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

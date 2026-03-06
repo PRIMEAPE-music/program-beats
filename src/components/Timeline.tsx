@@ -1,6 +1,9 @@
 import React, { useCallback, useRef, useEffect, useState } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { TRACK_COLORS, DEFAULT_CLIP_COLORS } from '../engine/types';
+import { PresetPicker } from './PresetPicker';
+import { SectionManager } from './SectionManager';
+import type { TrackType } from '../engine/types';
 
 interface ContextMenuState {
   x: number;
@@ -8,6 +11,18 @@ interface ContextMenuState {
   trackId: string;
   barIndex: number;
   clipId: string;
+}
+
+interface DragData {
+  clipId: string;
+  fromTrackId: string;
+  fromBar: number;
+}
+
+interface PresetPickerState {
+  trackId: string;
+  trackType: TrackType;
+  barIndex: number;
 }
 
 export const Timeline: React.FC = () => {
@@ -22,20 +37,28 @@ export const Timeline: React.FC = () => {
   const placeClip = useProjectStore((s) => s.placeClip);
   const removeClipPlacement = useProjectStore((s) => s.removeClipPlacement);
   const removeClip = useProjectStore((s) => s.removeClip);
+  const duplicateClip = useProjectStore((s) => s.duplicateClip);
+  const moveClip = useProjectStore((s) => s.moveClip);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [dragOverCell, setDragOverCell] = useState<{ trackId: string; bar: number } | null>(null);
+  const [presetPicker, setPresetPicker] = useState<PresetPickerState | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const dragDataRef = useRef<DragData | null>(null);
 
   const bars = Array.from({ length: project.totalBars }, (_, i) => i);
 
   // Close context menu on outside click
   useEffect(() => {
-    const handler = () => setContextMenu(null);
-    if (contextMenu) {
+    const handler = () => {
+      setContextMenu(null);
+      setPresetPicker(null);
+    };
+    if (contextMenu || presetPicker) {
       window.addEventListener('click', handler);
       return () => window.removeEventListener('click', handler);
     }
-  }, [contextMenu]);
+  }, [contextMenu, presetPicker]);
 
   // Find section for a given bar
   const getSectionForBar = useCallback(
@@ -59,26 +82,61 @@ export const Timeline: React.FC = () => {
         // Select existing clip
         selectClip(existingClipId);
       } else {
-        // Create new clip at this position
+        // Open preset picker for empty cell
         const trackDef = project.tracks.find((t) => t.id === trackId);
-        const color =
-          DEFAULT_CLIP_COLORS[
-            Object.keys(project.clips).length % DEFAULT_CLIP_COLORS.length
-          ];
-        const newClip = {
-          id: crypto.randomUUID(),
-          name: `${trackDef?.name ?? 'Clip'} ${barIndex + 1}`,
-          pattern: '',
-          color,
-          durationBars: 1,
-        };
-        addClip(newClip);
-        placeClip(trackId, barIndex, newClip.id);
-        selectClip(newClip.id);
+        if (trackDef) {
+          setPresetPicker({
+            trackId,
+            trackType: trackDef.type,
+            barIndex,
+          });
+        }
       }
     },
-    [project, selectTrack, selectClip, addClip, placeClip]
+    [project, selectTrack, selectClip]
   );
+
+  const handlePresetSelect = useCallback(
+    (pattern: string, name: string) => {
+      if (!presetPicker) return;
+      const color =
+        DEFAULT_CLIP_COLORS[
+          Object.keys(project.clips).length % DEFAULT_CLIP_COLORS.length
+        ];
+      const newClip = {
+        id: crypto.randomUUID(),
+        name,
+        pattern,
+        color,
+        durationBars: 1,
+      };
+      addClip(newClip);
+      placeClip(presetPicker.trackId, presetPicker.barIndex, newClip.id);
+      selectClip(newClip.id);
+      setPresetPicker(null);
+    },
+    [presetPicker, project.clips, addClip, placeClip, selectClip]
+  );
+
+  const handleCreateEmptyClip = useCallback(() => {
+    if (!presetPicker) return;
+    const trackDef = project.tracks.find((t) => t.id === presetPicker.trackId);
+    const color =
+      DEFAULT_CLIP_COLORS[
+        Object.keys(project.clips).length % DEFAULT_CLIP_COLORS.length
+      ];
+    const newClip = {
+      id: crypto.randomUUID(),
+      name: `${trackDef?.name ?? 'Clip'} ${presetPicker.barIndex + 1}`,
+      pattern: '',
+      color,
+      durationBars: 1,
+    };
+    addClip(newClip);
+    placeClip(presetPicker.trackId, presetPicker.barIndex, newClip.id);
+    selectClip(newClip.id);
+    setPresetPicker(null);
+  }, [presetPicker, project, addClip, placeClip, selectClip]);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, trackId: string, barIndex: number, clipId: string) => {
@@ -109,9 +167,76 @@ export const Timeline: React.FC = () => {
     setContextMenu(null);
   }, [contextMenu, project.tracks, removeClipPlacement, removeClip, selectedClipId, selectClip]);
 
+  const handleDuplicateClip = useCallback(() => {
+    if (!contextMenu) return;
+    const track = project.tracks.find((t) => t.id === contextMenu.trackId);
+    if (!track) return;
+    // Find next empty bar on same track
+    let targetBar = contextMenu.barIndex + 1;
+    while (targetBar < project.totalBars && track.clips[targetBar]) {
+      targetBar++;
+    }
+    if (targetBar < project.totalBars) {
+      duplicateClip(contextMenu.clipId, contextMenu.trackId, targetBar);
+    }
+    setContextMenu(null);
+  }, [contextMenu, project, duplicateClip]);
+
+  // Drag and drop handlers
+  const handleDragStart = useCallback(
+    (e: React.DragEvent, trackId: string, barIndex: number, clipId: string) => {
+      dragDataRef.current = { clipId, fromTrackId: trackId, fromBar: barIndex };
+      e.dataTransfer.effectAllowed = 'move';
+      // Set a minimal drag image text so the browser shows something
+      e.dataTransfer.setData('text/plain', clipId);
+      // Add dragging class after a tick
+      const target = e.currentTarget as HTMLElement;
+      requestAnimationFrame(() => target.classList.add('dragging'));
+    },
+    []
+  );
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent, trackId: string, bar: number) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      setDragOverCell({ trackId, bar });
+    },
+    []
+  );
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverCell(null);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent, trackId: string, bar: number) => {
+      e.preventDefault();
+      setDragOverCell(null);
+      const dragData = dragDataRef.current;
+      if (!dragData) return;
+      // Don't drop on same cell
+      if (dragData.fromTrackId === trackId && dragData.fromBar === bar) return;
+      // Don't drop on occupied cell
+      const track = project.tracks.find((t) => t.id === trackId);
+      if (track && track.clips[bar]) return;
+      moveClip(dragData.clipId, dragData.fromTrackId, dragData.fromBar, trackId, bar);
+      dragDataRef.current = null;
+    },
+    [project.tracks, moveClip]
+  );
+
+  const handleDragEnd = useCallback(() => {
+    setDragOverCell(null);
+    dragDataRef.current = null;
+  }, []);
+
   return (
     <div className="timeline" ref={timelineRef}>
       <div className="timeline-inner">
+        {/* Section markers above bar headers */}
+        <SectionManager />
+
         {/* Bar number headers */}
         <div className="timeline-bar-headers">
           {bars.map((bar) => {
@@ -146,17 +271,22 @@ export const Timeline: React.FC = () => {
                 const clipId = track.clips[bar];
                 const clip = clipId ? project.clips[clipId] : null;
                 const trackColor = TRACK_COLORS[track.type] || TRACK_COLORS.custom;
+                const isDragOver =
+                  dragOverCell?.trackId === track.id && dragOverCell?.bar === bar;
 
                 return (
                   <div
                     key={bar}
-                    className={`track-cell${clip ? ' has-clip' : ''}`}
+                    className={`track-cell${clip ? ' has-clip' : ''}${isDragOver && !clip ? ' drag-over' : ''}`}
                     onClick={() => handleCellClick(track.id, bar)}
                     onContextMenu={
                       clip
                         ? (e) => handleContextMenu(e, track.id, bar, clipId!)
                         : undefined
                     }
+                    onDragOver={(e) => handleDragOver(e, track.id, bar)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, track.id, bar)}
                   >
                     {clip ? (
                       <div
@@ -169,12 +299,39 @@ export const Timeline: React.FC = () => {
                               : '100%',
                         }}
                         title={`${clip.name}\n${clip.pattern || '(empty pattern)'}`}
+                        draggable
+                        onDragStart={(e) =>
+                          handleDragStart(e, track.id, bar, clipId!)
+                        }
+                        onDragEnd={handleDragEnd}
                       >
                         {clip.name}
                       </div>
                     ) : (
                       <div className="empty-cell-plus">+</div>
                     )}
+
+                    {/* Inline preset picker */}
+                    {presetPicker &&
+                      presetPicker.trackId === track.id &&
+                      presetPicker.barIndex === bar && (
+                        <div
+                          className="preset-picker-anchor"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <PresetPicker
+                            trackType={presetPicker.trackType}
+                            onSelect={handlePresetSelect}
+                            onClose={() => setPresetPicker(null)}
+                          />
+                          <div
+                            className="preset-picker-empty-btn"
+                            onClick={handleCreateEmptyClip}
+                          >
+                            Create empty clip
+                          </div>
+                        </div>
+                      )}
                   </div>
                 );
               })}
@@ -205,6 +362,12 @@ export const Timeline: React.FC = () => {
             }}
           >
             Edit Clip
+          </div>
+          <div
+            className="context-menu-item"
+            onClick={handleDuplicateClip}
+          >
+            Duplicate
           </div>
           <div
             className="context-menu-item danger"

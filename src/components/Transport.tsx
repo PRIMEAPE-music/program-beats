@@ -1,11 +1,14 @@
 import React, { useCallback } from 'react';
 import { useProjectStore } from '../store/projectStore';
+import { useUndoStore } from '../store/undoMiddleware';
 
 interface TransportProps {
   onOpenSamples: () => void;
+  onInitEngine: () => Promise<void>;
+  onOpenExport: () => void;
 }
 
-export const Transport: React.FC<TransportProps> = ({ onOpenSamples }) => {
+export const Transport: React.FC<TransportProps> = ({ onOpenSamples, onInitEngine, onOpenExport }) => {
   const project = useProjectStore((s) => s.project);
   const isPlaying = useProjectStore((s) => s.isPlaying);
   const currentBar = useProjectStore((s) => s.currentBar);
@@ -14,10 +17,12 @@ export const Transport: React.FC<TransportProps> = ({ onOpenSamples }) => {
   const setProject = useProjectStore((s) => s.setProject);
   const newProject = useProjectStore((s) => s.newProject);
   const saveProject = useProjectStore((s) => s.saveProject);
+  const { undo, redo, canUndo, canRedo } = useUndoStore();
 
-  const handlePlayStop = useCallback(() => {
+  const handlePlayStop = useCallback(async () => {
+    await onInitEngine();
     setPlaying(!isPlaying);
-  }, [isPlaying, setPlaying]);
+  }, [isPlaying, setPlaying, onInitEngine]);
 
   const handleBpmChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,10 +85,29 @@ export const Transport: React.FC<TransportProps> = ({ onOpenSamples }) => {
       </div>
 
       <div className="transport-right">
+        <button
+          className="btn btn-sm btn-undo"
+          onClick={undo}
+          disabled={!canUndo}
+          title="Undo (Ctrl+Z)"
+        >
+          Undo
+        </button>
+        <button
+          className="btn btn-sm btn-redo"
+          onClick={redo}
+          disabled={!canRedo}
+          title="Redo (Ctrl+Shift+Z)"
+        >
+          Redo
+        </button>
+        <button className="btn btn-sm" onClick={onOpenExport} title="Export audio">
+          Export
+        </button>
         <button className="btn btn-sm" onClick={onOpenSamples}>
           Samples
         </button>
-        <button className="btn btn-sm" onClick={saveProject}>
+        <button className="btn btn-sm" onClick={saveProject} title="Save (Ctrl+S)">
           Save
         </button>
         <button className="btn btn-sm" onClick={handleNewProject}>

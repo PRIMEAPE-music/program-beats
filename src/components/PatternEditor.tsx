@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useProjectStore } from '../store/projectStore';
 
-export const PatternEditor: React.FC = () => {
+interface PatternEditorProps {
+  onPreview: (pattern: string) => void;
+  onStopPreview: () => void;
+}
+
+export const PatternEditor: React.FC<PatternEditorProps> = ({ onPreview, onStopPreview }) => {
   const project = useProjectStore((s) => s.project);
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const updateClip = useProjectStore((s) => s.updateClip);
@@ -48,11 +53,17 @@ export const PatternEditor: React.FC = () => {
     selectClip(null);
   }, [selectClip]);
 
+  const [isPreviewing, setIsPreviewing] = useState(false);
+
   const handlePreview = useCallback(() => {
-    // Placeholder for preview functionality
-    // Would integrate with StrudelEngine to play just this pattern
-    console.log('Preview pattern:', pattern);
-  }, [pattern]);
+    if (isPreviewing) {
+      onStopPreview();
+      setIsPreviewing(false);
+    } else if (pattern.trim()) {
+      onPreview(pattern);
+      setIsPreviewing(true);
+    }
+  }, [pattern, isPreviewing, onPreview, onStopPreview]);
 
   if (!clip) return null;
 
@@ -106,7 +117,7 @@ export const PatternEditor: React.FC = () => {
 
       <div className="pattern-editor-actions">
         <button className="btn btn-sm" onClick={handlePreview}>
-          Preview
+          {isPreviewing ? 'Stop' : 'Preview'}
         </button>
         <button className="btn btn-sm btn-accent" onClick={handleSave}>
           Save

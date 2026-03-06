@@ -937,6 +937,402 @@ body {
 
 /* ===== Utility ===== */
 
+/* ===== Preset Picker ===== */
+
+.preset-picker-anchor {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+}
+
+.preset-picker {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 8px;
+  min-width: 260px;
+  max-height: 320px;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px var(--shadow);
+  z-index: 150;
+}
+
+.preset-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.preset-picker-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--text);
+}
+
+.preset-search {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.preset-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.preset-search::placeholder {
+  color: var(--text-dim);
+}
+
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preset-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.preset-item {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.1s ease;
+  border: 1px solid transparent;
+}
+
+.preset-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--border);
+}
+
+.preset-item-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.preset-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.preset-tag {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-dim);
+}
+
+.preset-item-pattern {
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  color: #7ec8e3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+}
+
+.preset-picker-empty-btn {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  transition: background 0.1s ease;
+}
+
+.preset-picker-empty-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+/* ===== Section Markers ===== */
+
+.section-markers {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bg);
+  min-height: 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-marker-cell {
+  width: 80px;
+  min-width: 80px;
+  height: 22px;
+  position: relative;
+  cursor: pointer;
+  border-right: 1px solid var(--grid-line);
+}
+
+.section-marker-cell:hover {
+  background: var(--hover);
+}
+
+.section-marker-cell.in-section {
+  background: none;
+}
+
+.section-span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.section-span-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.section-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 160;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 0;
+  min-width: 140px;
+  box-shadow: 0 4px 16px var(--shadow);
+}
+
+.section-dropdown-item {
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.1s ease;
+}
+
+.section-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.section-color-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.section-custom-input {
+  padding: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.section-custom-input input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.section-custom-input input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ===== Drag and Drop ===== */
+
+.drag-over {
+  background: rgba(233, 69, 96, 0.15) !important;
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
+.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+.clip[draggable="true"] {
+  cursor: grab;
+}
+
+.clip[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* ===== Export Dialog ===== */
+
+.export-dialog {
+  width: 440px;
+}
+
+.export-dialog h2 {
+  margin-bottom: 16px;
+  font-size: 18px;
+}
+
+.export-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius);
+}
+
+.export-info-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.export-label {
+  color: var(--text-dim);
+}
+
+.export-value {
+  font-weight: 600;
+}
+
+.export-progress-section {
+  margin-bottom: 16px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.15s linear;
+}
+
+.export-progress-text {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.export-error {
+  color: #e74c3c;
+  font-size: 13px;
+  padding: 10px;
+  background: rgba(231, 76, 60, 0.1);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+
+.export-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ===== Undo / Redo Buttons ===== */
+
+.btn-undo,
+.btn-redo {
+  min-width: 48px;
+}
+
+.btn-undo:disabled,
+.btn-redo:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ===== Refine Mode (Chat Panel) ===== */
+
+.refine-mode {
+  padding: 8px 16px;
+  background: rgba(233, 69, 96, 0.08);
+  border-bottom: 1px solid var(--border);
+}
+
+.refine-mode-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.refine-mode-label strong {
+  color: var(--text);
+}
+
+.refine-mode-pattern {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  color: #7ec8e3;
+  overflow-x: auto;
+  max-height: 60px;
+  overflow-y: auto;
+}
+
+.refine-toggle.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ===== Shortcut Hints ===== */
+
+.shortcut-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+/* ===== Utility ===== */
+
 .sr-only {
   position: absolute;
   width: 1px;
