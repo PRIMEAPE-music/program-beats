@@ -2,6 +2,7 @@ import { Cyclist } from '@strudel/core';
 import { mini } from '@strudel/mini';
 import { initAudioOnFirstClick, getAudioContext, webaudioOutput, registerSynthSounds } from '@strudel/webaudio';
 import '@strudel/tonal';
+import type { TrackEffects, MasterEffects } from './types';
 
 /**
  * StrudelEngine wraps Strudel's WebAudio capabilities for multi-track playback.
@@ -19,6 +20,7 @@ interface TrackState {
   volume: number;
   muted: boolean;
   solo: boolean;
+  effects?: TrackEffects;
 }
 
 export class StrudelEngine {
@@ -28,6 +30,7 @@ export class StrudelEngine {
   private bpm: number = 120;
   private isPlaying: boolean = false;
   private initialized: boolean = false;
+  private masterEffects: MasterEffects = { reverb: 0.1, delay: 0, compression: 0.3 };
 
   // ─── Lifecycle ──────────────────────────────────────────────
 
@@ -165,6 +168,21 @@ export class StrudelEngine {
     }
   }
 
+  // ─── Effects ───────────────────────────────────────────────
+
+  updateTrackEffects(trackId: string, effects: TrackEffects): void {
+    const t = this.tracks.get(trackId);
+    if (t) {
+      t.effects = effects;
+      if (this.isPlaying) this.rebuildAndSetPattern();
+    }
+  }
+
+  setMasterEffects(effects: MasterEffects): void {
+    this.masterEffects = effects;
+    if (this.isPlaying) this.rebuildAndSetPattern();
+  }
+
   // ─── Pattern building ───────────────────────────────────────
 
   /**
@@ -204,13 +222,35 @@ export class StrudelEngine {
 
     const parts = audible.map(([, t]) => {
       const gainStr = t.volume < 1 ? `.gain(${t.volume.toFixed(2)})` : '';
+
+      // Build per-track effect modifiers (only non-default values)
+      let fxStr = '';
+      if (t.effects) {
+        if (t.effects.delay > 0) fxStr += `.delay(${t.effects.delay.toFixed(2)})`;
+        if (t.effects.reverb > 0) fxStr += `.room(${t.effects.reverb.toFixed(2)})`;
+        if (t.effects.lpf < 20000) fxStr += `.lpf(${t.effects.lpf})`;
+        if (t.effects.hpf > 20) fxStr += `.hpf(${t.effects.hpf})`;
+        if (t.effects.distortion > 0) fxStr += `.distortion(${t.effects.distortion.toFixed(2)})`;
+      }
+
       // Wrap each track pattern in parentheses to keep operator precedence
-      return `(${t.pattern})${gainStr}`;
+      return `(${t.pattern})${gainStr}${fxStr}`;
     });
 
-    if (parts.length === 1) return parts[0];
+    let combined: string;
+    if (parts.length === 1) {
+      combined = parts[0];
+    } else {
+      combined = `stack(${parts.join(', ')})`;
+    }
 
-    return `stack(${parts.join(', ')})`;
+    // Apply master effects (only non-default values)
+    const me = this.masterEffects;
+    if (me.reverb > 0) combined += `.room(${me.reverb.toFixed(2)})`;
+    if (me.delay > 0) combined += `.delay(${me.delay.toFixed(2)})`;
+    if (me.compression > 0) combined += `.compress(${me.compression.toFixed(2)})`;
+
+    return combined;
   }
 
   /**

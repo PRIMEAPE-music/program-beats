@@ -3,6 +3,9 @@ import type {
   Project,
   Track,
   TrackType,
+  TrackEffects,
+  MasterEffects,
+  ScaleConfig,
   Clip,
   Section,
   ChatMessage,
@@ -19,6 +22,7 @@ function createDefaultTrack(name: string, type: TrackType): Track {
     muted: false,
     solo: false,
     clips: {},
+    effects: { delay: 0, reverb: 0, lpf: 20000, hpf: 20, distortion: 0 },
   };
 }
 
@@ -36,6 +40,8 @@ function createDefaultProject(): Project {
     clips: {},
     sections: [],
     totalBars: 16,
+    masterEffects: { reverb: 0.1, delay: 0, compression: 0.3 },
+    scaleConfig: { root: 'C', scale: 'minor' },
   };
 }
 
@@ -79,6 +85,13 @@ export interface ProjectState {
   // Chat
   addChatMessage: (message: ChatMessage) => void;
   setChatLoading: (loading: boolean) => void;
+  // Effects & scale actions
+  setTrackEffects: (trackId: string, effects: Partial<TrackEffects>) => void;
+  setMasterEffects: (effects: Partial<MasterEffects>) => void;
+  setScaleConfig: (config: Partial<ScaleConfig>) => void;
+  // Clip variation actions
+  addClipVariation: (clipId: string, pattern: string) => void;
+  setActiveVariation: (clipId: string, variationIndex: number | undefined) => void;
   // Project management
   saveProject: () => void;
   loadProject: (id: string) => void;
@@ -300,6 +313,67 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     })),
 
   setChatLoading: (loading) => set({ isChatLoading: loading }),
+
+  // Effects & scale actions
+
+  setTrackEffects: (trackId, effects) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, effects: { ...t.effects, ...effects } } : t
+        ),
+      },
+    })),
+
+  setMasterEffects: (effects) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        masterEffects: { ...state.project.masterEffects, ...effects },
+      },
+    })),
+
+  setScaleConfig: (config) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        scaleConfig: { ...state.project.scaleConfig, ...config },
+      },
+    })),
+
+  // Clip variation actions
+
+  addClipVariation: (clipId, pattern) =>
+    set((state) => {
+      const clip = state.project.clips[clipId];
+      if (!clip) return state;
+      const variations = [...(clip.variations || []), pattern];
+      return {
+        project: {
+          ...state.project,
+          clips: {
+            ...state.project.clips,
+            [clipId]: { ...clip, variations },
+          },
+        },
+      };
+    }),
+
+  setActiveVariation: (clipId, variationIndex) =>
+    set((state) => {
+      const clip = state.project.clips[clipId];
+      if (!clip) return state;
+      return {
+        project: {
+          ...state.project,
+          clips: {
+            ...state.project.clips,
+            [clipId]: { ...clip, activeVariation: variationIndex },
+          },
+        },
+      };
+    }),
 
   // Project management
 

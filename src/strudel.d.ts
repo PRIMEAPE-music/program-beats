@@ -29,3 +29,27 @@ declare module '@strudel/webaudio' {
 declare module '@strudel/tonal' {}
 
 declare module '@strudel/soundfonts' {}
+
+declare module 'midi-writer-js' {
+  export class Track {
+    addEvent(event: any | any[]): this;
+    setTempo(bpm: number): this;
+    addTrackName(name: string): this;
+    channel: number;
+  }
+  export class NoteEvent {
+    constructor(options: {
+      pitch: string | string[] | number | number[];
+      duration: string;
+      velocity?: number;
+      startTick?: number;
+      channel?: number;
+      wait?: string;
+    });
+  }
+  export class Writer {
+    constructor(tracks: Track | Track[]);
+    dataUri(): string;
+    buildFile(): Uint8Array;
+  }
+}

@@ -1,14 +1,29 @@
 import React, { useCallback } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { useUndoStore } from '../store/undoMiddleware';
+import { BeatIndicator } from './BeatIndicator';
 
 interface TransportProps {
   onOpenSamples: () => void;
   onInitEngine: () => Promise<void>;
   onOpenExport: () => void;
+  onOpenMidiExport: () => void;
+  onOpenGenres: () => void;
+  onOpenSongGenerator: () => void;
+  onOpenMixingSuggestions: () => void;
+  onOpenProjectBrowser: () => void;
 }
 
-export const Transport: React.FC<TransportProps> = ({ onOpenSamples, onInitEngine, onOpenExport }) => {
+export const Transport: React.FC<TransportProps> = ({
+  onOpenSamples,
+  onInitEngine,
+  onOpenExport,
+  onOpenMidiExport,
+  onOpenGenres,
+  onOpenSongGenerator,
+  onOpenMixingSuggestions,
+  onOpenProjectBrowser,
+}) => {
   const project = useProjectStore((s) => s.project);
   const isPlaying = useProjectStore((s) => s.isPlaying);
   const currentBar = useProjectStore((s) => s.currentBar);
@@ -57,6 +72,7 @@ export const Transport: React.FC<TransportProps> = ({ onOpenSamples, onInitEngin
         >
           {isPlaying ? '\u23F9' : '\u25B6'}
         </button>
+        <BeatIndicator bpm={project.bpm} isPlaying={isPlaying} />
         <div className="bar-display">
           Bar {currentBar + 1}
         </div>
@@ -101,11 +117,26 @@ export const Transport: React.FC<TransportProps> = ({ onOpenSamples, onInitEngin
         >
           Redo
         </button>
-        <button className="btn btn-sm" onClick={onOpenExport} title="Export audio">
-          Export
+        <button className="btn btn-sm btn-accent" onClick={onOpenSongGenerator} title="AI Generate Full Song">
+          AI Song
+        </button>
+        <button className="btn btn-sm" onClick={onOpenGenres} title="Genre Templates">
+          Genres
+        </button>
+        <button className="btn btn-sm" onClick={onOpenMixingSuggestions} title="AI Mixing Suggestions">
+          Mix AI
+        </button>
+        <button className="btn btn-sm" onClick={onOpenExport} title="Export WAV">
+          WAV
+        </button>
+        <button className="btn btn-sm" onClick={onOpenMidiExport} title="Export MIDI">
+          MIDI
         </button>
         <button className="btn btn-sm" onClick={onOpenSamples}>
           Samples
+        </button>
+        <button className="btn btn-sm" onClick={onOpenProjectBrowser} title="Browse Projects">
+          Projects
         </button>
         <button className="btn btn-sm" onClick={saveProject} title="Save (Ctrl+S)">
           Save

@@ -1,7 +1,9 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { TRACK_COLORS } from '../engine/types';
 import type { Track as TrackData } from '../engine/types';
+import { EffectsPanel } from './EffectsPanel';
+import '../styles/production.css';
 
 interface TrackProps {
   track: TrackData;
@@ -14,6 +16,8 @@ export const Track: React.FC<TrackProps> = ({ track }) => {
   const toggleTrackMute = useProjectStore((s) => s.toggleTrackMute);
   const toggleTrackSolo = useProjectStore((s) => s.toggleTrackSolo);
   const removeTrack = useProjectStore((s) => s.removeTrack);
+
+  const [showFx, setShowFx] = useState(false);
 
   const isSelected = selectedTrackId === track.id;
   const trackColor = TRACK_COLORS[track.type] || TRACK_COLORS.custom;
@@ -78,6 +82,16 @@ export const Track: React.FC<TrackProps> = ({ track }) => {
             S
           </button>
           <button
+            className={`btn-fx${showFx ? ' active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowFx((v) => !v);
+            }}
+            title="Toggle effects"
+          >
+            FX
+          </button>
+          <button
             className="btn-delete-track"
             onClick={handleDelete}
             title="Delete track"
@@ -99,6 +113,7 @@ export const Track: React.FC<TrackProps> = ({ track }) => {
           title={`Volume: ${Math.round(track.volume * 100)}%`}
         />
       </div>
+      {showFx && <EffectsPanel trackId={track.id} effects={track.effects} />}
     </div>
   );
 };

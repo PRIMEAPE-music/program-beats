@@ -179,6 +179,152 @@ export async function refinePattern(
   return parseResponse(text);
 }
 
+export interface FullSongConfig {
+  bpm: number;
+  totalBars: number;
+  sectionNames: string[];
+  scaleRoot?: string;
+  scaleName?: string;
+}
+
+export interface FullSongResult {
+  sections: Array<{
+    name: string;
+    patterns: Array<{
+      trackType: string;
+      pattern: string;
+      description: string;
+    }>;
+  }>;
+}
+
+export async function generateFullSong(
+  prompt: string,
+  config: FullSongConfig
+): Promise<FullSongResult> {
+  const scaleInfo = config.scaleRoot && config.scaleName
+    ? `${config.scaleRoot} ${config.scaleName}`
+    : "your choice of key";
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 4096,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: `Generate a FULL SONG with the following specifications:
+
+Prompt: ${prompt}
+BPM: ${config.bpm}
+Key: ${scaleInfo}
+Total bars: ${config.totalBars}
+Sections: ${config.sectionNames.join(", ")}
+
+For EACH section, generate patterns for these track types: drums, bass, melody, chords, fx.
+Each section should have DISTINCT variations — for example, the verse should be sparser than the chorus, the intro should build up, the bridge should contrast, and the outro should wind down.
+
+IMPORTANT: Respond ONLY with JSON in this exact shape:
+{
+  "sections": [
+    {
+      "name": "Section Name",
+      "patterns": [
+        {
+          "trackType": "drums" | "bass" | "melody" | "chords" | "fx",
+          "pattern": "<valid Strudel code>",
+          "description": "<short musical description>"
+        }
+      ]
+    }
+  ]
+}
+
+Make sure every pattern is valid Strudel code. Create musically cohesive patterns that work together and vary meaningfully across sections.`,
+      },
+    ],
+  });
+
+  const text =
+    response.content[0].type === "text" ? response.content[0].text : "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error("No JSON found in Claude response");
+  }
+  const parsed = JSON.parse(jsonMatch[0]);
+  if (!parsed.sections || !Array.isArray(parsed.sections)) {
+    throw new Error("Response missing 'sections' array");
+  }
+  return parsed as FullSongResult;
+}
+
+export interface MixingSuggestionsResult {
+  suggestions: Array<{
+    trackName: string;
+    issue: string;
+    fix: string;
+    fixPattern?: string;
+  }>;
+}
+
+export async function getMixingSuggestions(
+  tracks: Array<{ name: string; type: string; pattern: string; effects: any }>
+): Promise<MixingSuggestionsResult> {
+  const trackList = tracks
+    .map(
+      (t) =>
+        `- ${t.name} (${t.type}): pattern="${t.pattern}", effects=${JSON.stringify(t.effects)}`
+    )
+    .join("\n");
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 2048,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: `Analyze the following mix and suggest improvements. Look for issues like:
+- Frequency clashes between tracks
+- Missing frequency ranges
+- Patterns that don't complement each other rhythmically
+- Effects that could be improved
+- Volume/gain balancing issues
+- Suggestions for additional patterns or variations
+
+Current tracks:
+${trackList}
+
+IMPORTANT: Respond ONLY with JSON in this exact shape:
+{
+  "suggestions": [
+    {
+      "trackName": "<name of the track>",
+      "issue": "<description of the issue>",
+      "fix": "<description of the suggested fix>",
+      "fixPattern": "<optional: a corrected Strudel pattern if applicable>"
+    }
+  ]
+}
+
+Provide 3-6 actionable suggestions. If you include a fixPattern, it must be valid Strudel code.`,
+      },
+    ],
+  });
+
+  const text =
+    response.content[0].type === "text" ? response.content[0].text : "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error("No JSON found in Claude response");
+  }
+  const parsed = JSON.parse(jsonMatch[0]);
+  if (!parsed.suggestions || !Array.isArray(parsed.suggestions)) {
+    throw new Error("Response missing 'suggestions' array");
+  }
+  return parsed as MixingSuggestionsResult;
+}
+
 export async function suggestArrangement(
   tracks: { name: string; type: string; pattern: string }[],
   sections: string[]

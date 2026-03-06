@@ -14,11 +14,12 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@strudel/core": "^1.1.0",
     "@strudel/mini": "^1.1.0",
+    "@strudel/soundfonts": "^1.1.0",
     "@strudel/tonal": "^1.1.0",
     "@strudel/webaudio": "^1.1.0",
-    "@strudel/soundfonts": "^1.1.0",
     "cors": "^2.8.5",
     "express": "^4.21.0",
+    "midi-writer-js": "^3.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.0"

@@ -3,6 +3,7 @@ import { useProjectStore } from '../store/projectStore';
 import { TRACK_COLORS, DEFAULT_CLIP_COLORS } from '../engine/types';
 import { PresetPicker } from './PresetPicker';
 import { SectionManager } from './SectionManager';
+import { ClipVisual } from './ClipVisual';
 import type { TrackType } from '../engine/types';
 
 interface ContextMenuState {
@@ -305,7 +306,12 @@ export const Timeline: React.FC = () => {
                         }
                         onDragEnd={handleDragEnd}
                       >
-                        {clip.name}
+                        <span className="clip-name">{clip.name}</span>
+                        <ClipVisual
+                          pattern={clip.pattern}
+                          trackType={track.type}
+                          color={clip.color || trackColor}
+                        />
                       </div>
                     ) : (
                       <div className="empty-cell-plus">+</div>

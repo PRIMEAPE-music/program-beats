@@ -4,6 +4,27 @@ export interface Clip {
   pattern: string; // Strudel mini-notation or code
   color: string;
   durationBars: number; // how many bars this clip spans
+  variations?: string[]; // array of alternative patterns
+  activeVariation?: number; // index into variations, undefined = main pattern
+}
+
+export interface TrackEffects {
+  delay: number;      // 0-1
+  reverb: number;     // 0-1 (room)
+  lpf: number;        // 20-20000 Hz (low pass filter cutoff)
+  hpf: number;        // 20-20000 Hz (high pass filter cutoff)
+  distortion: number; // 0-1
+}
+
+export interface MasterEffects {
+  reverb: number;     // 0-1
+  delay: number;      // 0-1
+  compression: number; // 0-1
+}
+
+export interface ScaleConfig {
+  root: string;       // e.g. "C", "F#", "Bb"
+  scale: string;      // e.g. "minor", "major", "dorian", "pentatonic"
 }
 
 export interface Track {
@@ -14,6 +35,7 @@ export interface Track {
   muted: boolean;
   solo: boolean;
   clips: Record<number, string>; // position (bar index) -> clip ID
+  effects: TrackEffects;
 }
 
 export type TrackType = 'drums' | 'bass' | 'melody' | 'chords' | 'fx' | 'custom';
@@ -34,6 +56,8 @@ export interface Project {
   clips: Record<string, Clip>; // clip ID -> Clip
   sections: Section[];
   totalBars: number;
+  masterEffects: MasterEffects;
+  scaleConfig: ScaleConfig;
 }
 
 export interface ChatMessage {
